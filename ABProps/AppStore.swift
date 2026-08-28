@@ -8,7 +8,7 @@ final class AppStore {
     var liveRoot: PlistValue?
     var query = ""
     var onlyNamed = false
-    var onlyChanged = false
+    var onlyUnnamed = false
     var names: [String: String] = [:]
     var status = ""
     var error: String?
@@ -19,8 +19,11 @@ final class AppStore {
     }
 
     func loadPlist(_ data: Data, name: String) throws {
-        let parsed = try PlistValue.parse(data).unwrapped()
-        let next = Catalog.build(root: parsed, fileName: name)
+        let raw = try PlistValue.parse(data)
+        let parsed = raw.unwrapped()
+        var next = Catalog.build(root: parsed, fileName: name)
+        next.originalRaw = raw
+        next.originalBytes = data
         if next.buckets.isEmpty {
             throw EditorError.message("Sem chaves abp./gabp. neste plist.")
         }
@@ -31,11 +34,12 @@ final class AppStore {
     }
 
     func loadFramework(_ data: Data) throws {
+        status = "Capstone: a desmontar ARM64…"
         let result = try MachOExtractor.extract(data)
         for (code, name) in result.byCode {
             names[code] = name
         }
-        status = "Capstone: \(result.named) nomes · \(result.stubCodes) getters"
+        status = "Capstone ARM64 · \(result.named) nomes · \(result.stubCodes) getters"
     }
 
     func loadNameMap(_ data: Data) throws {
@@ -62,8 +66,9 @@ final class AppStore {
     }
 
     func exportPlist() throws -> Data {
-        guard let liveRoot else { throw EditorError.message("Nada aberto.") }
-        return try liveRoot.wrapped().serialize()
+        guard let catalog, let liveRoot else { throw EditorError.message("Nada aberto.") }
+        if dirtyCount == 0, let bytes = catalog.originalBytes { return bytes }
+        return try catalog.originalRaw.preserving(live: liveRoot).serialize()
     }
 
     func name(for code: String) -> String? { names[code] }

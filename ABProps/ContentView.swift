@@ -222,8 +222,10 @@ struct EditorPane: View {
             .glassEffect(.regular, in: .rect(cornerRadius: 16))
             .padding(.horizontal, 16)
             HStack {
-                Toggle("Só com nome", isOn: Bindable(store).onlyNamed).toggleStyle(.switch)
-                Toggle("Alteradas", isOn: Bindable(store).onlyChanged).toggleStyle(.switch)
+                Toggle("Com nome", isOn: Bindable(store).onlyNamed).toggleStyle(.switch)
+                    .onChange(of: store.onlyNamed) { _, v in if v { store.onlyUnnamed = false } }
+                Toggle("Sem nome", isOn: Bindable(store).onlyUnnamed).toggleStyle(.switch)
+                    .onChange(of: store.onlyUnnamed) { _, v in if v { store.onlyNamed = false } }
             }
             .font(.footnote)
             .padding(.horizontal, 20)
@@ -244,10 +246,9 @@ struct FlagList: View {
         let q = store.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return bucket.flags.filter { row in
             let liveVal = live.flagValue(store: bucket.storeKey, code: row.code) ?? row.value
-            let origVal = store.catalog?.original.flagValue(store: bucket.storeKey, code: row.code) ?? row.value
-            if store.onlyChanged && liveVal == origVal { return false }
             let named = store.name(for: row.code)
             if store.onlyNamed && named == nil { return false }
+            if store.onlyUnnamed && named != nil { return false }
             if q.isEmpty { return true }
             return row.code.lowercased().contains(q)
                 || (named?.lowercased().contains(q) ?? false)

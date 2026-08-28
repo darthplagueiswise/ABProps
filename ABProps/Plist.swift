@@ -83,6 +83,57 @@ indirect enum PlistValue {
     func serialize() throws -> Data {
         try PlistCodec.serialize(self)
     }
+
+    func preserving(live: PlistValue) -> PlistValue {
+        guard case .dict(let origPairs) = self, case .dict(let livePairs) = live else {
+            return live.wrapped()
+        }
+        var seen = Set<String>()
+        var out: [(String, PlistValue)] = []
+        for (k, orig) in origPairs {
+            seen.insert(k)
+            if let liveV = live.get(k) {
+                out.append((k, Self.preserved(orig: orig, live: liveV)))
+            } else {
+                out.append((k, orig))
+            }
+        }
+        for (k, liveV) in livePairs where !seen.contains(k) {
+            out.append((k, liveV.wrapped()))
+        }
+        return .dict(out)
+    }
+
+    private static func preserved(orig: PlistValue, live: PlistValue) -> PlistValue {
+        if case .data(let d) = orig, PlistCodec.isBplist(d), case .nested(let inner) = live {
+            if let parsed = try? PlistValue.parse(d).unwrapped(), equal(parsed, inner) {
+                return orig
+            }
+            if let bytes = try? inner.serialize() { return .data(bytes) }
+        }
+        if case .nested(let inner) = live, let bytes = try? inner.serialize() {
+            return .data(bytes)
+        }
+        return equal(orig.unwrapped(), live) ? orig : live.wrapped()
+    }
+
+    static func equal(_ a: PlistValue, _ b: PlistValue) -> Bool {
+        switch (a, b) {
+        case (.null, .null): return true
+        case (.bool(let x), .bool(let y)): return x == y
+        case (.int(let x), .int(let y)): return x == y
+        case (.real(let x), .real(let y)): return x == y
+        case (.date(let x), .date(let y)): return x == y
+        case (.str(let x), .str(let y)): return x == y
+        case (.data(let x), .data(let y)): return x == y
+        case (.arr(let x), .arr(let y)):
+            return x.count == y.count && zip(x, y).allSatisfy { equal($0, $1) }
+        case (.dict(let x), .dict(let y)):
+            return x.count == y.count && zip(x, y).allSatisfy { $0.0 == $1.0 && equal($0.1, $1.1) }
+        case (.nested(let x), .nested(let y)): return equal(x, y)
+        default: return false
+        }
+    }
 }
 
 struct FlagRow: Identifiable {
@@ -104,6 +155,8 @@ struct Bucket: Identifiable {
 struct Catalog {
     var root: PlistValue
     var original: PlistValue
+    var originalRaw: PlistValue
+    var originalBytes: Data?
     var fileName: String
     var buckets: [Bucket]
 
@@ -123,7 +176,7 @@ struct Catalog {
 
     static func build(root: PlistValue, fileName: String) -> Catalog {
         guard case .dict(let pairs) = root else {
-            return Catalog(root: root, original: root, fileName: fileName, buckets: [])
+            return Catalog(root: root, original: root, originalRaw: root, originalBytes: nil, fileName: fileName, buckets: [])
         }
         var buckets: [Bucket] = []
         for (key, value) in pairs {
@@ -142,7 +195,7 @@ struct Catalog {
             }
         }
         buckets.sort { weight($0.storeKey) < weight($1.storeKey) }
-        return Catalog(root: root, original: root, fileName: fileName, buckets: buckets)
+        return Catalog(root: root, original: root, originalRaw: root, originalBytes: nil, fileName: fileName, buckets: buckets)
     }
 
     static func isFlagMap(_ v: PlistValue) -> Bool {
@@ -167,8 +220,9 @@ struct Catalog {
     }
 
     static func title(_ key: String) -> String {
-        if key.hasPrefix("abp.pnone"), key.hasSuffix("p") { return "Flags pessoais" }
-        if key.hasPrefix("gabp.ofrep"), key.hasSuffix("p") { return "Flags de grupo" }
+        if key.hasPrefix("abp.pnone"), key.hasSuffix("p") { return "Pessoal" }
+        if key.hasPrefix("gabp.ofrep"), key.hasSuffix("p") { return "Grupo base (ofrep)" }
+        if key.hasPrefix("gabp.o"), key.contains("@g.us"), key.hasSuffix("p") { return "Override de grupo" }
         if key.hasPrefix("abp.") { return "ABP" }
         if key.hasPrefix("gabp.") { return "Grupo" }
         return key
