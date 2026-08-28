@@ -17,7 +17,9 @@ struct ContentView: View {
                 onBinary: { pickingBinary = true },
                 onJSON: { pickingJSON = true },
                 onMC: { pickingMC = true },
-                onShareNames: { share(name: "abprops-web.json") { try store.exportNames() } }
+                onShareNames: { share(name: "abprops-web.json") { try store.exportNames() } },
+                onShareMapping: { share(name: "id_name_mapping.json") { try store.exportMapping() } },
+                onShareOverrides: { share(name: "mc_overrides.json") { try store.exportOverrides() } }
             )
             .navigationTitle("ABProps")
             .navigationBarTitleDisplayMode(.large)
@@ -150,6 +152,8 @@ struct HomeView: View {
     var onJSON: () -> Void
     var onMC: () -> Void
     var onShareNames: () -> Void
+    var onShareMapping: () -> Void
+    var onShareOverrides: () -> Void
 
     var body: some View {
         List {
@@ -214,15 +218,28 @@ struct HomeView: View {
 
             Section {
                 Button(action: onMC) {
-                    HomeCell(icon: "folder.fill", title: "Enviar arquivos", value: "params_map e names", tint: .purple)
+                    HomeCell(icon: "folder.fill", title: "Enviar arquivos", value: "params_map, names txt ou id_name_mapping.json", tint: .purple)
                 }
                 .buttonStyle(.plain)
-                if !store.mcConfigs.isEmpty {
-                    Button { store.path.append(.mobileConfig) } label: {
-                        HomeCell(icon: "list.bullet.rectangle", title: "Abrir mapping", value: "\(store.mcConfigs.count) configs")
-                    }
-                    .buttonStyle(.plain)
+                Button { store.path.append(.mobileConfig) } label: {
+                    HomeCell(
+                        icon: "list.bullet.rectangle.fill",
+                        title: "Abrir mapping",
+                        value: store.mcConfigs.isEmpty ? "Nada carregado" : "\(store.mcConfigs.count) configs",
+                        tint: .indigo
+                    )
                 }
+                .buttonStyle(.plain)
+                Button(action: onShareMapping) {
+                    HomeCell(icon: "doc.fill", title: "Exportar mapping", value: "id_name_mapping.json", tint: .mint)
+                }
+                .buttonStyle(.plain)
+                .disabled(store.mcConfigs.isEmpty)
+                Button(action: onShareOverrides) {
+                    HomeCell(icon: "square.and.arrow.up.fill", title: "Exportar overrides", value: store.mcSelected.isEmpty ? "mc_overrides.json — nada marcado" : "\(store.mcSelected.count) params", tint: .pink)
+                }
+                .buttonStyle(.plain)
+                .disabled(store.mcSelected.isEmpty)
             } header: {
                 Text("MobileConfig")
             }
@@ -364,36 +381,37 @@ struct FlagLine: View {
     var named: String? { store.name(for: row.code) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(wrapIdent(named ?? "sem nome"))
-                .font(.system(size: 13, weight: named == nil ? .regular : .semibold))
-                .foregroundStyle(named == nil ? .secondary : .primary)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-
-            HStack(alignment: .center, spacing: 8) {
-                Text(row.code)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                Text(store.kind(for: row.code).label)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.tertiary)
-                if row.layer == "inject" {
-                    Text("fora")
-                        .font(.caption2)
-                        .foregroundStyle(.blue)
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(wrapIdent(named ?? "sem nome"))
+                    .font(.system(size: 13, weight: named == nil ? .regular : .semibold))
+                    .foregroundStyle(named == nil ? .secondary : .primary)
+                    .lineLimit(2)
+                HStack(spacing: 6) {
+                    Text(row.code)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                    Text(store.kind(for: row.code).label)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.tertiary)
+                    if row.layer == "inject" {
+                        Text("fora").font(.caption2).foregroundStyle(.blue)
+                    }
+                    if live != orig {
+                        Text("edit").font(.caption2).foregroundStyle(.orange)
+                    }
                 }
-                if live != orig {
-                    Text("edit")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                }
-                Spacer(minLength: 8)
-                control
             }
+            Spacer(minLength: 8)
+            control
         }
-        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+    }
+
+    func flipBool() {
+        let on = live == "1" || live.lowercased() == "true"
+        let useWord = live.lowercased() == "true" || live.lowercased() == "false"
+        store.setFlag(storeKey: row.storeKey, code: row.code, value: useWord ? (on ? "false" : "true") : (on ? "0" : "1"))
     }
 
     @ViewBuilder
@@ -403,14 +421,16 @@ struct FlagLine: View {
             Toggle("", isOn: Binding(
                 get: { live == "1" || live.lowercased() == "true" },
                 set: { on in
-                    let next: String
-                    if live.lowercased() == "true" || live.lowercased() == "false" { next = on ? "true" : "false" }
-                    else { next = on ? "1" : "0" }
-                    store.setFlag(storeKey: row.storeKey, code: row.code, value: next)
+                    let useWord = live.lowercased() == "true" || live.lowercased() == "false"
+                    store.setFlag(storeKey: row.storeKey, code: row.code, value: useWord ? (on ? "true" : "false") : (on ? "1" : "0"))
                 }
             ))
             .labelsHidden()
             .tint(.blue)
+            .controlSize(.large)
+            .frame(width: 64, height: 44)
+            .contentShape(Rectangle())
+            .allowsHitTesting(true)
         case .int, .float, .double, .string:
             TextField(store.kind(for: row.code) == .string ? "texto" : "0", text: Binding(
                 get: { live },
@@ -466,8 +486,8 @@ struct MCView: View {
         .navigationTitle("MobileConfig")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button("JSON", systemImage: "doc", action: onShareMapping)
-                Button("Overrides", systemImage: "square.and.arrow.up", action: onShareOverrides)
+                Button("mapping", action: onShareMapping)
+                Button("overrides", action: onShareOverrides)
                     .disabled(store.mcSelected.isEmpty)
             }
         }

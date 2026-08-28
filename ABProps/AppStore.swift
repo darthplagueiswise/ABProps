@@ -170,7 +170,11 @@ final class AppStore {
             return
         }
         if lower.hasSuffix(".json") || data.first == 0x7B || data.first == 0x5B {
-            try loadNameMap(data)
+            if Self.looksLikeMCMapping(data) {
+                try ingestMobileConfig(data, name: name)
+            } else {
+                try loadNameMap(data)
+            }
             return
         }
         if lower.contains("sharedmodules") || (lower.contains("whatsapp") && data.count > 1_000_000) {
@@ -305,7 +309,16 @@ final class AppStore {
         status = "Mapa: \(names.count) nomes"
     }
 
-    func ingestMobileConfig(_ data: Data, name: String) throws {
+    static func looksLikeMCMapping(_ data: Data) -> Bool {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) else { return false }
+        if let dict = obj as? [String: Any], dict["id_name_mapping"] != nil || dict["mapping"] != nil {
+            return true
+        }
+        if let arr = obj as? [String], let sample = arr.first {
+            return sample.split(separator: ":", omittingEmptySubsequences: false).count >= 3
+        }
+        return false
+    }
         if name.contains("params_map") || String(data: data.prefix(3), encoding: .utf8) == "v2,"
             || String(data: data.prefix(20), encoding: .utf8)?.hasPrefix("v2,") == true {
             guard let text = String(data: data, encoding: .utf8) else {
