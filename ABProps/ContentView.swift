@@ -150,7 +150,7 @@ struct HomeView: View {
 
     var body: some View {
         List {
-            Section("Arquivos") {
+            Section {
                 Button(action: onPlist) {
                     HomeCell(
                         icon: "doc",
@@ -177,6 +177,8 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(store.fetching)
+            } header: {
+                Text("Arquivos")
             } footer: {
                 if store.busy {
                     ProgressView(value: store.disasmPct, total: 100) {
@@ -185,7 +187,7 @@ struct HomeView: View {
                 }
             }
 
-            Section("Editor") {
+            Section {
                 Button { store.openPatcher() } label: {
                     HomeCell(
                         icon: "slider.horizontal.3",
@@ -199,9 +201,11 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(store.names.isEmpty)
+            } header: {
+                Text("Editor")
             }
 
-            Section("MobileConfig") {
+            Section {
                 Button(action: onMC) {
                     HomeCell(icon: "folder", title: "Enviar arquivos", value: "params_map e names")
                 }
@@ -212,6 +216,8 @@ struct HomeView: View {
                     }
                     .buttonStyle(.plain)
                 }
+            } header: {
+                Text("MobileConfig")
             }
         }
         .listStyle(.insetGrouped)
@@ -278,7 +284,7 @@ struct FlagsView: View {
 
     var body: some View {
         List {
-            Section("Injetar") {
+            Section {
                 HStack(spacing: 8) {
                     TextField("1777", text: Bindable(store).customCode)
                         .keyboardType(.numberPad)
@@ -291,12 +297,16 @@ struct FlagsView: View {
                         .frame(width: 44)
                     Button("Add") { Keyboard.hide(); store.addCustom() }
                 }
+            } header: {
+                Text("Injetar")
             }
 
-            Section("Flags") {
+            Section {
                 ForEach(filtered) { row in
                     FlagLine(row: row)
                 }
+            } header: {
+                Text("Flags")
             }
         }
         .listStyle(.insetGrouped)
@@ -425,10 +435,12 @@ struct MCView: View {
     var body: some View {
         List {
             ForEach(configs) { cfg in
-                Section("\(cfg.configId)  \(cfg.name)") {
+                Section {
                     ForEach(cfg.params.filter { !$0.name.isEmpty }) { p in
                         MCParamLine(param: p)
                     }
+                } header: {
+                    Text("\(cfg.configId)  \(cfg.name)")
                 }
             }
         }
