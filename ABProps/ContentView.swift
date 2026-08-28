@@ -387,7 +387,7 @@ struct MCParamLine: View {
             } label: {
                 Image(systemName: on ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 16))
-                    .foregroundStyle(on ? Color.primary : .tertiary)
+                    .foregroundStyle(on ? Color.primary : Color(uiColor: .tertiaryLabel))
             }
             .buttonStyle(.plain)
         }

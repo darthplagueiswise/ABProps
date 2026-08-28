@@ -9,7 +9,6 @@ enum AppScreen: Hashable {
 }
 
 @Observable
-@MainActor
 final class AppStore {
     var screen: AppScreen = .home
     var catalog: Catalog?
@@ -70,16 +69,15 @@ final class AppStore {
         status = "Capstone: a desmontar ARM64…"
         ping("Capstone iniciado · \(data.count / 1_000_000) MB")
         error = nil
-        Task.detached(priority: .userInitiated) { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let result = try MachOExtractor.extract(data) { pct, msg in
-                    Task { @MainActor in
-                        self?.disasmPct = pct
-                        self?.status = msg
+                    DispatchQueue.main.async {
+                        self.disasmPct = pct
+                        self.status = msg
                     }
                 }
-                await MainActor.run {
-                    guard let self else { return }
+                DispatchQueue.main.async {
                     for (code, name) in result.byCode { self.names[code] = name }
                     self.namedCount = result.named
                     self.stubCount = result.stubCodes
@@ -90,11 +88,11 @@ final class AppStore {
                     self.ping(msg)
                 }
             } catch {
-                await MainActor.run {
-                    self?.busy = false
-                    self?.error = error.localizedDescription
-                    self?.status = "Capstone falhou"
-                    self?.ping("Capstone falhou")
+                DispatchQueue.main.async {
+                    self.busy = false
+                    self.error = error.localizedDescription
+                    self.status = "Capstone falhou"
+                    self.ping("Capstone falhou")
                 }
             }
         }
