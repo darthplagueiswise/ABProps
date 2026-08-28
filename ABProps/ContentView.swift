@@ -112,52 +112,31 @@ enum FileShare {
     }
 }
 
-struct DarkCanvas: View {
-    var body: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.07, green: 0.075, blue: 0.09),
-                Color(red: 0.03, green: 0.03, blue: 0.035),
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea()
-        .overlay {
-            Circle()
-                .fill(Color.white.opacity(0.04))
-                .frame(width: 280, height: 280)
-                .blur(radius: 80)
-                .offset(x: -90, y: -180)
-        }
-    }
-}
-
-struct HomeRow: View {
+struct HomeCell: View {
+    let icon: String
     let title: String
-    let subtitle: String
-    let button: String
-    var busy = false
-    let action: () -> Void
-
+    let value: String
     var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.body.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.headline)
+                    .font(.body)
                     .foregroundStyle(.primary)
-                Text(subtitle)
+                Text(value)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
             Spacer(minLength: 8)
-            Button(button, action: action)
-                .buttonStyle(.glassProminent)
-                .disabled(busy)
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
-        .padding(18)
-        .glassEffect(.regular, in: .rect(cornerRadius: 26))
+        .contentShape(Rectangle())
     }
 }
 
@@ -170,59 +149,72 @@ struct HomeView: View {
     var onShareNames: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                GlassEffectContainer(spacing: 14) {
-                    VStack(spacing: 14) {
-                        HomeRow(
-                            title: "Plist",
-                            subtitle: store.catalog == nil ? "group.net.whatsapp.WhatsApp.shared.plist" : store.plistName,
-                            button: "Abrir",
-                            action: onPlist
-                        )
-                        HomeRow(
-                            title: "SharedModules",
-                            subtitle: store.disassembling ? store.status : (store.stubCount == 0 ? "Framework Mach-O" : "\(store.namedCount) nomes · \(store.stubCount) getters"),
-                            button: store.disassembling ? "…" : "Enviar",
-                            busy: store.disassembling,
-                            action: onBinary
-                        )
-                        HomeRow(
-                            title: "Fetch ABProps",
-                            subtitle: store.fetching ? store.status : (store.fetched ? "\(store.namedCount) nomes" : "WhatsApp Web"),
-                            button: store.fetching ? "…" : "Buscar",
-                            busy: store.fetching,
-                            action: { store.fetchWebABProps() }
-                        )
-                    }
+        List {
+            Section("Arquivos") {
+                Button(action: onPlist) {
+                    HomeCell(
+                        icon: "doc",
+                        title: "Plist",
+                        value: store.catalog == nil ? "Toque para abrir" : store.plistName
+                    )
                 }
-
+                .buttonStyle(.plain)
+                Button(action: onBinary) {
+                    HomeCell(
+                        icon: "gearshape.2",
+                        title: "SharedModules",
+                        value: store.disassembling ? store.status : (store.stubCount == 0 ? "Toque para enviar o framework" : "\(store.stubCount) getters")
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(store.disassembling)
+                Button { store.fetchWebABProps() } label: {
+                    HomeCell(
+                        icon: "arrow.down.circle",
+                        title: "Fetch ABProps",
+                        value: store.fetching ? store.status : (store.fetched ? "\(store.namedCount) nomes — toque de novo" : "Toque para buscar no WhatsApp Web")
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(store.fetching)
+            } footer: {
                 if store.busy {
-                    ProgressView(value: store.disasmPct, total: 100)
-                        .padding(.horizontal, 8)
-                }
-
-                Button("Patcher") { store.openPatcher() }
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.large)
-                    .frame(maxWidth: .infinity)
-
-                HStack(spacing: 10) {
-                    Button("JSON", action: onShareNames)
-                        .buttonStyle(.glass)
-                        .disabled(store.names.isEmpty)
-                    Button("Nomes", action: onJSON)
-                        .buttonStyle(.glass)
-                    Button(store.mcConfigs.isEmpty ? "MC" : "MC \(store.mcConfigs.count)") {
-                        if store.mcConfigs.isEmpty { onMC() } else { store.path.append(.mobileConfig) }
+                    ProgressView(value: store.disasmPct, total: 100) {
+                        Text(store.status)
                     }
-                        .buttonStyle(.glass)
                 }
             }
-            .padding(20)
-            .padding(.bottom, 24)
+
+            Section("Editor") {
+                Button { store.openPatcher() } label: {
+                    HomeCell(
+                        icon: "slider.horizontal.3",
+                        title: "Abrir Patcher",
+                        value: "\(store.namedCount) flags no mapa"
+                    )
+                }
+                .buttonStyle(.plain)
+                Button(action: onShareNames) {
+                    HomeCell(icon: "square.and.arrow.up", title: "Baixar JSON", value: store.names.isEmpty ? "Nada ainda" : "\(store.namedCount) nomes")
+                }
+                .buttonStyle(.plain)
+                .disabled(store.names.isEmpty)
+            }
+
+            Section("MobileConfig") {
+                Button(action: onMC) {
+                    HomeCell(icon: "folder", title: "Enviar arquivos", value: "params_map e names")
+                }
+                .buttonStyle(.plain)
+                if !store.mcConfigs.isEmpty {
+                    Button { store.path.append(.mobileConfig) } label: {
+                        HomeCell(icon: "list.bullet.rectangle", title: "Abrir mapping", value: "\(store.mcConfigs.count) configs")
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
-        .background { DarkCanvas() }
+        .listStyle(.insetGrouped)
     }
 }
 
@@ -286,42 +278,28 @@ struct FlagsView: View {
 
     var body: some View {
         List {
-            Section {
+            Section("Injetar") {
                 HStack(spacing: 8) {
                     TextField("1777", text: Bindable(store).customCode)
                         .keyboardType(.numberPad)
                         .font(.body.monospaced())
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .glassEffect(.regular.interactive(), in: .capsule)
-                        .frame(width: 88)
+                        .frame(width: 72)
                     TextField("nome", text: Bindable(store).customName)
                         .textInputAutocapitalization(.never)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .glassEffect(.regular.interactive(), in: .capsule)
                     TextField("1", text: Bindable(store).customValue)
                         .font(.body.monospaced())
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .glassEffect(.regular.interactive(), in: .capsule)
-                        .frame(width: 52)
+                        .frame(width: 44)
                     Button("Add") { Keyboard.hide(); store.addCustom() }
-                        .buttonStyle(.glassProminent)
                 }
             }
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
 
-            ForEach(filtered) { row in
-                FlagLine(row: row)
-                    .listRowBackground(Color.clear)
+            Section("Flags") {
+                ForEach(filtered) { row in
+                    FlagLine(row: row)
+                }
             }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background { DarkCanvas() }
+        .listStyle(.insetGrouped)
         .searchable(text: Bindable(store).query, placement: .navigationBarDrawer(displayMode: .always), prompt: "nome ou código")
         .onSubmit(of: .search) { Keyboard.hide() }
         .navigationTitle("Patcher")
