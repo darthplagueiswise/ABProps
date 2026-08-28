@@ -10,7 +10,9 @@ final class AppStore {
     var onlyNamed = false
     var onlyUnnamed = false
     var names: [String: String] = [:]
-    var status = ""
+    var status = "Capstone ARM64 · parado — sobe o SharedModules"
+    var disasmPct: Double = 0
+    var busy = false
     var error: String?
 
     var dirtyCount: Int {
@@ -33,13 +35,29 @@ final class AppStore {
         status = "\(next.fileName) · \(next.flagCount) flags"
     }
 
-    func loadFramework(_ data: Data) throws {
+    func loadFramework(_ data: Data) {
+        busy = true
+        disasmPct = 4
         status = "Capstone: a desmontar ARM64…"
-        let result = try MachOExtractor.extract(data)
-        for (code, name) in result.byCode {
-            names[code] = name
+        error = nil
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            do {
+                let result = try MachOExtractor.extract(data)
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    for (code, name) in result.byCode { self.names[code] = name }
+                    self.disasmPct = 100
+                    self.status = "Capstone ARM64 · \(result.named) nomes · \(result.stubCodes) getters"
+                    self.busy = false
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self?.error = error.localizedDescription
+                    self?.status = "Capstone falhou"
+                    self?.busy = false
+                }
+            }
         }
-        status = "Capstone ARM64 · \(result.named) nomes · \(result.stubCodes) getters"
     }
 
     func loadNameMap(_ data: Data) throws {

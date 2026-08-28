@@ -137,10 +137,12 @@ indirect enum PlistValue {
 }
 
 struct FlagRow: Identifiable {
-    var id: String { code }
+    var id: String { "\(storeKey):\(code)" }
     let storeKey: String
     let code: String
     let value: String
+    let overlay: Bool
+    let layer: String
 }
 
 struct Bucket: Identifiable {
@@ -213,10 +215,23 @@ struct Catalog {
         var rows: [FlagRow] = []
         for (code, entry) in p {
             guard case .dict = entry else { continue }
-            rows.append(FlagRow(storeKey: store, code: code, value: PlistValue.scalar(entry.get("value")) ?? ""))
+            rows.append(FlagRow(
+                storeKey: store,
+                code: code,
+                value: PlistValue.scalar(entry.get("value")) ?? "",
+                overlay: store.hasPrefix("gabp.o") && store.contains("@g.us"),
+                layer: layer(store)
+            ))
         }
         rows.sort { (Int($0.code) ?? 0) < (Int($1.code) ?? 0) }
         return rows
+    }
+
+    static func layer(_ key: String) -> String {
+        if key.hasPrefix("gabp.o"), key.contains("@g.us"), key.hasSuffix("p") { return "overlay" }
+        if key.hasPrefix("gabp.ofrep"), key.hasSuffix("p") { return "ofrep" }
+        if key.hasPrefix("abp."), key.hasSuffix("p") { return "personal" }
+        return "other"
     }
 
     static func title(_ key: String) -> String {

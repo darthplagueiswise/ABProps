@@ -14,14 +14,17 @@ struct ContentView: View {
         NavigationStack {
             ZStack {
                 BackgroundMesh()
-                if store.catalog == nil {
-                    LandingView(
-                        onPlist: { pickingPlist = true },
-                        onBinary: { pickingBinary = true },
-                        onJSON: { pickingJSON = true }
-                    )
-                } else {
-                    EditorPane(selectedBucket: $selectedBucket)
+                VStack(spacing: 0) {
+                    DisasmBar()
+                    if store.catalog == nil {
+                        LandingView(
+                            onPlist: { pickingPlist = true },
+                            onBinary: { pickingBinary = true },
+                            onJSON: { pickingJSON = true }
+                        )
+                    } else {
+                        EditorPane(selectedBucket: $selectedBucket)
+                    }
                 }
             }
             .navigationTitle("ABProps")
@@ -80,7 +83,7 @@ struct ContentView: View {
             let data = try Data(contentsOf: url)
             switch kind {
             case .plist: try store.loadPlist(data, name: url.lastPathComponent)
-            case .binary: try store.loadFramework(data)
+            case .binary: store.loadFramework(data)
             case .json: try store.loadNameMap(data)
             }
         } catch {
@@ -129,53 +132,66 @@ struct BackgroundMesh: View {
     }
 }
 
+struct DisasmBar: View {
+    @Environment(AppStore.self) private var store
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 10) {
+                Text("DISASSEMBLE")
+                    .font(.caption2.weight(.semibold).monospaced())
+                    .foregroundStyle(.secondary)
+                ProgressView(value: store.disasmPct, total: 100)
+                    .tint(.cyan)
+                if store.busy { ProgressView().controlSize(.small) }
+            }
+            Text(store.status)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial)
+    }
+}
+
 struct LandingView: View {
     var onPlist: () -> Void
     var onBinary: () -> Void
     var onJSON: () -> Void
-    @Environment(AppStore.self) private var store
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Código + nome. Liquid Glass no iOS 26.")
+                Text("Plist e framework. Os dois.")
                     .font(.largeTitle.weight(.semibold))
                     .padding(.top, 12)
-                Text("O disassemble dos getters WAABProperties está nativo (ARM64). Não leva LIEF nem Capstone.")
+                Text("O plist tem os códigos. O SharedModules tem os nomes. Capstone (cs_disasm ARM64) está ligado nesta IPA — a barra DISASSEMBLE em cima mostra o progresso.")
                     .foregroundStyle(.secondary)
-                GlassCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("1. Plist").font(.headline)
-                        Text("group.net.whatsapp.WhatsApp.shared.plist").font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                        Button("Abrir plist", action: onPlist)
-                            .buttonStyle(.glassProminent)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                GlassEffectContainer {
-                    HStack(spacing: 12) {
-                        GlassCard {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Framework").font(.headline)
-                                Text("SharedModules").font(.caption.monospaced()).foregroundStyle(.secondary)
-                                Button("Subir", action: onBinary).buttonStyle(.glass)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 12) {
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("1 · Plist").font(.headline)
+                            Text("group.net.whatsapp.WhatsApp.shared.plist")
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                            Button("Abrir plist", action: onPlist)
+                                .buttonStyle(.glassProminent)
                         }
-                        GlassCard {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Mapa JSON").font(.headline)
-                                Text("reutilizável").font(.caption).foregroundStyle(.secondary)
-                                Button("Subir", action: onJSON).buttonStyle(.glass)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("2 · SharedModules").font(.headline)
+                            Text("Mach-O · Capstone ARM64")
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                            Button("Subir framework", action: onBinary)
+                                .buttonStyle(.glassProminent)
                         }
                     }
                 }
-                if !store.status.isEmpty {
-                    Text(store.status).font(.footnote).foregroundStyle(.secondary)
-                }
+                Button("Ou mapa JSON de nomes", action: onJSON)
+                    .buttonStyle(.glass)
             }
             .padding(20)
         }
@@ -282,22 +298,22 @@ struct FlagRowView: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text(store.name(for: row.code) ?? "sem nome neste mapa")
+                    Text(store.name(for: row.code) ?? "sem nome")
                         .font(.body.weight(.medium))
                     if store.name(for: row.code) != nil {
-                        Text("iOS")
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .glassEffect(.regular, in: .capsule)
+                        Text("resolvido").font(.caption2).padding(.horizontal, 6).padding(.vertical, 2).glassEffect(.regular, in: .capsule)
                     }
+                    if row.overlay {
+                        Text("override").font(.caption2).padding(.horizontal, 6).padding(.vertical, 2).glassEffect(.regular, in: .capsule)
+                    }
+                    Text((live == "1" || live == "true") ? "activo" : "inactivo")
+                        .font(.caption2)
+                        .foregroundStyle((live == "1" || live == "true") ? .green : .secondary)
                     if live != orig {
-                        Text("editado")
-                            .font(.caption2)
-                            .foregroundStyle(.orange)
+                        Text("editado").font(.caption2).foregroundStyle(.orange)
                     }
                 }
-                Text(row.code + (live != orig ? " · era \(orig)" : ""))
+                Text(row.code + layerHint(row.layer) + (live != orig ? " · era \(orig)" : ""))
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
             }
@@ -331,6 +347,15 @@ struct FlagRowView: View {
 
     func isToggle(_ v: String) -> Bool {
         ["0", "1", "true", "false"].contains(v)
+    }
+
+    func layerHint(_ layer: String) -> String {
+        switch layer {
+        case "personal": return " · pessoal"
+        case "overlay": return " · overlay de grupo (ganha sobre ofrep)"
+        case "ofrep": return " · ofrep (base de grupo)"
+        default: return ""
+        }
     }
 }
 
