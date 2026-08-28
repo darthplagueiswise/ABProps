@@ -1,6 +1,6 @@
 import Foundation
 
-enum PlistValue {
+indirect enum PlistValue {
     case null
     case bool(Bool)
     case int(Int64)
