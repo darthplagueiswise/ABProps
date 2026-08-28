@@ -14,6 +14,8 @@ final class AppStore {
     var catalog: Catalog?
     var liveRoot: PlistValue?
     var query = ""
+    var onlyNamed = false
+    var onlyUnnamed = false
     var names: [String: String] = [:]
     var status = "À espera de ficheiros"
     var disasmPct: Double = 0
