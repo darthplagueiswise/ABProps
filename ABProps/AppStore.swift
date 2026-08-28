@@ -319,6 +319,8 @@ final class AppStore {
         }
         return false
     }
+
+    func ingestMobileConfig(_ data: Data, name: String) throws {
         if name.contains("params_map") || String(data: data.prefix(3), encoding: .utf8) == "v2,"
             || String(data: data.prefix(20), encoding: .utf8)?.hasPrefix("v2,") == true {
             guard let text = String(data: data, encoding: .utf8) else {
