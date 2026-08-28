@@ -161,7 +161,7 @@ final class DesktopPage: NSObject, WKNavigationDelegate {
             if #available(iOS 16.4, *) { wv.isInspectable = false }
             self.webView = wv
             if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
-                let win = scene.windows.first ?? scene.keyWindow
+                let win = scene.windows.first { $0.isKeyWindow } ?? scene.windows.first
                 wv.alpha = 0.01
                 wv.isUserInteractionEnabled = false
                 wv.frame = CGRect(x: 0, y: 0, width: 2, height: 2)
