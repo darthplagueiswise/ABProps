@@ -353,18 +353,20 @@ struct FlagsView: View {
             List(filtered) { row in
                 FlagLine(row: row)
                     .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 5, leading: 14, bottom: 5, trailing: 14))
+                    .listRowInsets(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 14))
+                    .listRowSeparator(.visible)
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-        }
-        .safeAreaInset(edge: .bottom) {
-            HStack {
-                Text("\(filtered.count) · \(store.namedInPlist) no plist · \(store.injectCount) injectáveis · \(store.dirtyCount) editados")
-                    .font(.caption.monospaced())
+
+            HStack(alignment: .center, spacing: 10) {
+                Text("\(filtered.count) · \(store.namedInPlist) no plist · \(store.injectCount) fora · \(store.dirtyCount) editados")
+                    .font(.caption2.monospaced())
                     .foregroundStyle(.secondary)
-                Spacer()
-                Button("Exportar plist", action: onShare)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 8)
+                Button("Exportar", action: onShare)
                     .buttonStyle(.glassProminent)
             }
             .padding(.horizontal, 14)
@@ -383,70 +385,79 @@ struct FlagLine: View {
     var named: String? { store.name(for: row.code) }
 
     var body: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(named ?? "sem nome")
-                        .font(.subheadline.weight(named == nil ? .regular : .medium))
-                        .foregroundStyle(named == nil ? .secondary : .primary)
-                        .lineLimit(1)
-                    if named != nil {
-                        Text("resolvido")
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .glassEffect(.regular, in: .capsule)
-                    }
-                    if row.overlay {
-                        Text("ovr")
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .glassEffect(.regular, in: .capsule)
-                    }
-                    if row.layer == "inject" {
-                        Text("injectar")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.cyan)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .glassEffect(.regular, in: .capsule)
-                    }
-                    if live != orig {
-                        Text("edit").font(.caption2.weight(.semibold)).foregroundStyle(.orange)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 6) {
+            Text(wrapIdent(named ?? "sem nome"))
+                .font(.system(size: 13, weight: named == nil ? .regular : .semibold, design: .default))
+                .foregroundStyle(named == nil ? .secondary : .primary)
+                .multilineTextAlignment(.leading)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+
+            HStack(alignment: .center, spacing: 8) {
                 Text(row.code)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 8)
-            if ["0", "1", "true", "false"].contains(live) {
-                Toggle("", isOn: Binding(
-                    get: { live == "1" || live == "true" },
-                    set: { on in
-                        let next: String
-                        if live == "true" || live == "false" { next = on ? "true" : "false" }
-                        else { next = on ? "1" : "0" }
-                        store.setFlag(storeKey: row.storeKey, code: row.code, value: next)
-                    }
-                ))
-                .labelsHidden()
-                .tint(.cyan)
-            } else {
-                TextField("valor", text: Binding(
-                    get: { live },
-                    set: { store.setFlag(storeKey: row.storeKey, code: row.code, value: $0) }
-                ))
-                .font(.caption.monospaced())
-                .multilineTextAlignment(.trailing)
-                .frame(maxWidth: 88)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .glassEffect(.regular, in: .rect(cornerRadius: 8))
+                if row.overlay {
+                    Text("ovr")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .glassEffect(.regular, in: .capsule)
+                }
+                if row.layer == "inject" {
+                    Text("fora")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.cyan)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .glassEffect(.regular, in: .capsule)
+                }
+                if live != orig {
+                    Text("edit")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.orange)
+                }
+                Spacer(minLength: 8)
+                control
             }
         }
+        .padding(.vertical, 2)
     }
+
+    @ViewBuilder
+    var control: some View {
+        if ["0", "1", "true", "false"].contains(live) {
+            Toggle("", isOn: Binding(
+                get: { live == "1" || live == "true" },
+                set: { on in
+                    let next: String
+                    if live == "true" || live == "false" { next = on ? "true" : "false" }
+                    else { next = on ? "1" : "0" }
+                    store.setFlag(storeKey: row.storeKey, code: row.code, value: next)
+                }
+            ))
+            .labelsHidden()
+            .tint(.cyan)
+            .fixedSize()
+        } else {
+            TextField("valor", text: Binding(
+                get: { live },
+                set: { store.setFlag(storeKey: row.storeKey, code: row.code, value: $0) }
+            ))
+            .font(.caption.monospaced())
+            .multilineTextAlignment(.trailing)
+            .frame(minWidth: 52, maxWidth: 96)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .glassEffect(.regular, in: .rect(cornerRadius: 8))
+        }
+    }
+}
+
+func wrapIdent(_ s: String) -> String {
+    s.replacingOccurrences(of: "_", with: "_\u{200B}")
 }
 
 struct MCView: View {
@@ -523,7 +534,10 @@ struct MCParamLine: View {
     var body: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(param.name).font(.subheadline.weight(.medium)).lineLimit(1)
+                Text(wrapIdent(param.name))
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text("\(param.index) · \(param.type.rawValue)")
                     .font(.caption2.monospaced())
                     .foregroundStyle(.secondary)
