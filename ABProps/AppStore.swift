@@ -2,22 +2,49 @@ import Foundation
 import Observation
 import UniformTypeIdentifiers
 
+enum AppScreen: Hashable {
+    case home
+    case flags
+    case mobileConfig
+}
+
 @Observable
+@MainActor
 final class AppStore {
+    var screen: AppScreen = .home
     var catalog: Catalog?
     var liveRoot: PlistValue?
     var query = ""
-    var onlyNamed = false
-    var onlyUnnamed = false
     var names: [String: String] = [:]
-    var status = "Capstone ARM64 · parado — sobe o SharedModules"
+    var status = "À espera de ficheiros"
     var disasmPct: Double = 0
     var busy = false
     var error: String?
+    var toast: String?
+    var plistName = ""
+    var namedCount = 0
+    var stubCount = 0
+
+    var mcConfigs: [MCConfig] = []
+    var mcQuery = ""
+    var mcSelected: Set<String> = []
+    var mcValues: [String: String] = [:]
+    var mcMapLoaded = false
+    var mcNamesLoaded = 0
 
     var dirtyCount: Int {
         guard let catalog, let liveRoot else { return 0 }
         return catalog.changedCount(live: liveRoot)
+    }
+
+    var allFlags: [FlagRow] {
+        guard let catalog else { return [] }
+        var best: [String: FlagRow] = [:]
+        let order = catalog.buckets.filter { $0.kind == .flags }.sorted { Catalog.weight($0.storeKey) < Catalog.weight($1.storeKey) }
+        for b in order {
+            for r in b.flags { best[r.code] = r }
+        }
+        return best.values.sorted { (Int($0.code) ?? 0) < (Int($1.code) ?? 0) }
     }
 
     func loadPlist(_ data: Data, name: String) throws {
@@ -31,30 +58,43 @@ final class AppStore {
         }
         catalog = next
         liveRoot = next.root
+        plistName = name
         error = nil
-        status = "\(next.fileName) · \(next.flagCount) flags"
+        ping("Plist: \(next.flagCount) flags")
+        status = "\(name) · \(next.flagCount) flags · \(namedCount) nomes"
     }
 
     func loadFramework(_ data: Data) {
         busy = true
-        disasmPct = 4
+        disasmPct = 2
         status = "Capstone: a desmontar ARM64…"
+        ping("Capstone iniciado · \(data.count / 1_000_000) MB")
         error = nil
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        Task.detached(priority: .userInitiated) { [weak self] in
             do {
-                let result = try MachOExtractor.extract(data)
-                DispatchQueue.main.async {
+                let result = try MachOExtractor.extract(data) { pct, msg in
+                    Task { @MainActor in
+                        self?.disasmPct = pct
+                        self?.status = msg
+                    }
+                }
+                await MainActor.run {
                     guard let self else { return }
                     for (code, name) in result.byCode { self.names[code] = name }
+                    self.namedCount = result.named
+                    self.stubCount = result.stubCodes
                     self.disasmPct = 100
-                    self.status = "Capstone ARM64 · \(result.named) nomes · \(result.stubCodes) getters"
                     self.busy = false
+                    let msg = "Disassemble OK · \(result.named) nomes · \(result.stubCodes) getters"
+                    self.status = msg
+                    self.ping(msg)
                 }
             } catch {
-                DispatchQueue.main.async {
+                await MainActor.run {
+                    self?.busy = false
                     self?.error = error.localizedDescription
                     self?.status = "Capstone falhou"
-                    self?.busy = false
+                    self?.ping("Capstone falhou")
                 }
             }
         }
@@ -75,7 +115,44 @@ final class AppStore {
                 n += 1
             }
         }
-        status = "Mapa: \(n) nomes"
+        namedCount = names.count
+        ping("Mapa JSON · \(n) nomes")
+        status = "Mapa: \(names.count) nomes"
+    }
+
+    func ingestMobileConfig(_ data: Data, name: String) throws {
+        if name.contains("params_map") || String(data: data.prefix(3), encoding: .utf8) == "v2,"
+            || String(data: data.prefix(20), encoding: .utf8)?.hasPrefix("v2,") == true {
+            guard let text = String(data: data, encoding: .utf8) else {
+                throw EditorError.message("params_map.txt não é UTF-8.")
+            }
+            mcConfigs = MobileConfig.parseMap(text)
+            mcMapLoaded = true
+            ping("params_map · \(mcConfigs.count) configs")
+            return
+        }
+        let lines = try MobileConfig.parseNamesJSON(data)
+        MobileConfig.applyNames(lines, onto: &mcConfigs)
+        mcNamesLoaded += 1
+        ping("\(name) · \(lines.count) linhas · \(mcConfigs.filter { !$0.name.isEmpty }.count) configs com nome")
+    }
+
+    func exportMapping() throws -> Data {
+        try MobileConfig.mappingJSON(from: mcConfigs)
+    }
+
+    func exportOverrides() throws -> Data {
+        let selected = mcConfigs.flatMap(\.params).filter { mcSelected.contains($0.id) }
+        return try MobileConfig.overridesJSON(selected: selected, values: mcValues, configs: mcConfigs)
+    }
+
+    func toggleOverride(_ p: MCParam) {
+        if mcSelected.contains(p.id) {
+            mcSelected.remove(p.id)
+        } else {
+            mcSelected.insert(p.id)
+            if mcValues[p.id] == nil { mcValues[p.id] = p.type.defaultValue }
+        }
     }
 
     func setFlag(storeKey: String, code: String, value: String) {
@@ -90,6 +167,14 @@ final class AppStore {
     }
 
     func name(for code: String) -> String? { names[code] }
+
+    func ping(_ msg: String) {
+        toast = msg
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_200_000_000)
+            if toast == msg { toast = nil }
+        }
+    }
 }
 
 enum EditorError: LocalizedError {
@@ -98,8 +183,4 @@ enum EditorError: LocalizedError {
         if case .message(let s) = self { return s }
         return nil
     }
-}
-
-extension UTType {
-    static let macho = UTType(exportedAs: "com.apple.mach-o-binary")
 }

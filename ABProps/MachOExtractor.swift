@@ -18,7 +18,7 @@ enum MachOExtractor {
         var op: String
     }
 
-    static func extract(_ data: Data) throws -> Result {
+    static func extract(_ data: Data, progress: ((Double, String) -> Void)? = nil) throws -> Result {
         if ab_cs_init() != 0 {
             throw EditorError.message("Capstone falhou a abrir (CS_ARCH_ARM64).")
         }
@@ -26,12 +26,18 @@ enum MachOExtractor {
             throw EditorError.message("Ficheiro demasiado pequeno.")
         }
         let thin = try thinSlice(data)
-        // Scan TEXT via file-offset==VA for this WhatsApp dylib; Capstone decodes each stub.
         let textEnd = min(thin.count, 0x3600000)
+        progress?(4, "Capstone: a varrer stubs…")
         var pairCount: [String: Int] = [:]
         var samples: [(off: Int, t2: Int, t3: Int, t4: Int)] = []
         var off = 0x4000
+        var lastPct = 4.0
         while off + 24 < textEnd {
+            let pct = 4.0 + 70.0 * Double(off) / Double(max(textEnd, 1))
+            if pct - lastPct >= 3 {
+                lastPct = pct
+                progress?(pct, String(format: "Capstone · stubs %.0f%%", pct))
+            }
             if u32(thin, off) != stp {
                 off += 4
                 continue
@@ -56,6 +62,7 @@ enum MachOExtractor {
             off += 24
         }
         let top = pairCount.sorted { $0.value > $1.value }.prefix(8)
+        progress?(78, "Capstone: a ler códigos…")
         var bestMap: [Int: String] = [:]
         for (k, _) in top {
             let parts = k.split(separator: ":")
@@ -72,6 +79,7 @@ enum MachOExtractor {
         let tags: Set<Int> = [0x100000, 0x200000, 0x300000]
         let dataLo = 0x3A00000
         let dataHi = min(thin.count - 8, 0x4400000)
+        progress?(88, "Capstone: a ligar nomes…")
         off = dataLo & ~7
         while off < dataHi {
             let q = u64(thin, off)

@@ -3,79 +3,74 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.colorScheme) private var scheme
     @State private var pickingPlist = false
     @State private var pickingBinary = false
     @State private var pickingJSON = false
+    @State private var pickingMC = false
     @State private var sharing = false
     @State private var exportURL: URL?
-    @State private var selectedBucket: String?
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                BackgroundMesh()
-                VStack(spacing: 0) {
-                    DisasmBar()
-                    if store.catalog == nil {
-                        LandingView(
-                            onPlist: { pickingPlist = true },
-                            onBinary: { pickingBinary = true },
-                            onJSON: { pickingJSON = true }
-                        )
-                    } else {
-                        EditorPane(selectedBucket: $selectedBucket)
+            ZStack(alignment: .bottom) {
+                Group {
+                    switch store.screen {
+                    case .home: HomeView(
+                        onPlist: { pickingPlist = true },
+                        onBinary: { pickingBinary = true },
+                        onJSON: { pickingJSON = true },
+                        onMC: { pickingMC = true }
+                    )
+                    case .flags: FlagsView(onShare: sharePlist)
+                    case .mobileConfig: MCView(onShareMapping: shareMapping, onShareOverrides: shareOverrides)
                     }
                 }
+                if let toast = store.toast {
+                    Text(toast)
+                        .font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .padding(.bottom, 18)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
+            .animation(.easeOut(duration: 0.2), value: store.toast)
+            .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
             .navigationTitle("ABProps")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    if store.catalog != nil {
-                        Button("Outro") {
-                            store.catalog = nil
-                            store.liveRoot = nil
-                        }
-                        .buttonStyle(.glass)
+                    if store.screen != .home {
+                        Button("Início") { store.screen = .home }
+                            .font(.system(size: 13))
                     }
                 }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    if store.catalog != nil {
-                        Button("Framework") { pickingBinary = true }
-                            .buttonStyle(.glass)
-                        Button("Guardar") { share() }
-                            .buttonStyle(.glassProminent)
+                ToolbarItem(placement: .topBarTrailing) {
+                    if store.screen == .flags {
+                        Button("Guardar") { sharePlist() }
+                            .font(.system(size: 13, weight: .semibold))
                     }
                 }
             }
         }
-        .fileImporter(isPresented: $pickingPlist, allowedContentTypes: [.item, .propertyList, .data]) { result in
-            ingest(result, kind: .plist)
-        }
-        .fileImporter(isPresented: $pickingBinary, allowedContentTypes: [.item, .data, .unixExecutable]) { result in
-            ingest(result, kind: .binary)
-        }
-        .fileImporter(isPresented: $pickingJSON, allowedContentTypes: [.json, .item]) { result in
-            ingest(result, kind: .json)
-        }
+        .fileImporter(isPresented: $pickingPlist, allowedContentTypes: [.item, .propertyList, .data]) { ingest($0, .plist) }
+        .fileImporter(isPresented: $pickingBinary, allowedContentTypes: [.item, .data, .unixExecutable]) { ingest($0, .binary) }
+        .fileImporter(isPresented: $pickingJSON, allowedContentTypes: [.json, .item]) { ingest($0, .json) }
+        .fileImporter(isPresented: $pickingMC, allowedContentTypes: [.item, .text, .json, .plainText], allowsMultipleSelection: true) { ingestMC($0) }
         .sheet(isPresented: $sharing) {
-            if let exportURL {
-                ShareSheet(url: exportURL)
-            }
+            if let exportURL { ShareSheet(url: exportURL) }
         }
         .alert("Erro", isPresented: Binding(
             get: { store.error != nil },
             set: { if !$0 { store.error = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(store.error ?? "")
-        }
+        )) { Button("OK", role: .cancel) {} } message: { Text(store.error ?? "") }
     }
 
     enum Kind { case plist, binary, json }
 
-    func ingest(_ result: Result<URL, Error>, kind: Kind) {
+    func ingest(_ result: Result<URL, Error>, _ kind: Kind) {
         do {
             let url = try result.get()
             let access = url.startAccessingSecurityScopedResource()
@@ -91,12 +86,29 @@ struct ContentView: View {
         }
     }
 
-    func share() {
+    func ingestMC(_ result: Result<[URL], Error>) {
         do {
-            let data = try store.exportPlist()
-            let name = store.catalog?.fileName ?? "group.net.whatsapp.WhatsApp.shared.plist"
+            let urls = try result.get()
+            for url in urls {
+                let access = url.startAccessingSecurityScopedResource()
+                defer { if access { url.stopAccessingSecurityScopedResource() } }
+                let data = try Data(contentsOf: url)
+                try store.ingestMobileConfig(data, name: url.lastPathComponent)
+            }
+        } catch {
+            store.error = error.localizedDescription
+        }
+    }
+
+    func sharePlist() { writeShare(name: store.plistName.isEmpty ? "group.net.whatsapp.WhatsApp.shared.plist" : store.plistName, data: { try store.exportPlist() }) }
+    func shareMapping() { writeShare(name: "id_name_mapping.json", data: { try store.exportMapping() }) }
+    func shareOverrides() { writeShare(name: "mc_overrides.json", data: { try store.exportOverrides() }) }
+
+    func writeShare(name: String, data: () throws -> Data) {
+        do {
+            let bytes = try data()
             let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
-            try data.write(to: url)
+            try bytes.write(to: url)
             exportURL = url
             sharing = true
         } catch {
@@ -105,267 +117,280 @@ struct ContentView: View {
     }
 }
 
-struct BackgroundMesh: View {
-    var body: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.07, green: 0.09, blue: 0.14),
-                Color(red: 0.12, green: 0.16, blue: 0.22),
-                Color(red: 0.05, green: 0.06, blue: 0.08),
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
-        .overlay {
-            Circle()
-                .fill(Color.cyan.opacity(0.18))
-                .frame(width: 280, height: 280)
-                .blur(radius: 60)
-                .offset(x: -80, y: -180)
-            Circle()
-                .fill(Color.indigo.opacity(0.22))
-                .frame(width: 320, height: 320)
-                .blur(radius: 70)
-                .offset(x: 120, y: 260)
-        }
-    }
-}
-
-struct DisasmBar: View {
+struct HomeView: View {
     @Environment(AppStore.self) private var store
-    var body: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 10) {
-                Text("DISASSEMBLE")
-                    .font(.caption2.weight(.semibold).monospaced())
-                    .foregroundStyle(.secondary)
-                ProgressView(value: store.disasmPct, total: 100)
-                    .tint(.cyan)
-                if store.busy { ProgressView().controlSize(.small) }
-            }
-            Text(store.status)
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial)
-    }
-}
-
-struct LandingView: View {
     var onPlist: () -> Void
     var onBinary: () -> Void
     var onJSON: () -> Void
+    var onMC: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("Plist e framework. Os dois.")
-                    .font(.largeTitle.weight(.semibold))
-                    .padding(.top, 12)
-                Text("O plist tem os códigos. O SharedModules tem os nomes. Capstone (cs_disasm ARM64) está ligado nesta IPA — a barra DISASSEMBLE em cima mostra o progresso.")
+        List {
+            Section {
+                ProgressView(value: store.disasmPct, total: 100)
+                    .tint(.primary)
+                Text(store.status)
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
-                HStack(spacing: 12) {
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("1 · Plist").font(.headline)
-                            Text("group.net.whatsapp.WhatsApp.shared.plist")
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
-                            Button("Abrir plist", action: onPlist)
-                                .buttonStyle(.glassProminent)
-                        }
-                    }
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("2 · SharedModules").font(.headline)
-                            Text("Mach-O · Capstone ARM64")
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
-                            Button("Subir framework", action: onBinary)
-                                .buttonStyle(.glassProminent)
-                        }
+                    .textSelection(.enabled)
+            } header: { Text("Disassemble") }
+
+            Section("ABProps") {
+                Button(action: onPlist) {
+                    LabeledContent("Plist") {
+                        Text(store.catalog == nil ? "abrir" : store.plistName)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                 }
-                Button("Ou mapa JSON de nomes", action: onJSON)
-                    .buttonStyle(.glass)
+                Button(action: onBinary) {
+                    LabeledContent("SharedModules") {
+                        Text(store.namedCount == 0 ? (store.busy ? "a desmontar…" : "subir") : "\(store.namedCount) nomes")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(store.namedCount > 0 ? Color.primary : .secondary)
+                    }
+                }
+                .disabled(store.busy)
+                Button("Mapa JSON de nomes", action: onJSON)
+                Button("Entrar nas flags") { store.screen = .flags }
+                    .disabled(store.catalog == nil)
+                    .font(.system(size: 14, weight: .semibold))
             }
-            .padding(20)
+
+            Section("MobileConfig") {
+                Text("params_map.txt + params_names_v4_u*.txt → id_name_mapping.json. Os hex do mapa são IDs e deltas; o tipo (vazio/8/c/10) é bool/int/string/double.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                Button("Subir params_map / names JSON", action: onMC)
+                LabeledContent("Estado") {
+                    Text(store.mcMapLoaded ? "\(store.mcConfigs.count) configs · \(store.mcNamesLoaded) name files" : "nada")
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                Button("Abrir mapping / overrides") { store.screen = .mobileConfig }
+                    .disabled(store.mcConfigs.isEmpty)
+                    .font(.system(size: 14, weight: .semibold))
+            }
         }
+        .listStyle(.insetGrouped)
+        .font(.system(size: 14))
     }
 }
 
-struct EditorPane: View {
+struct FlagsView: View {
     @Environment(AppStore.self) private var store
-    @Binding var selectedBucket: String?
+    var onShare: () -> Void
+    @State private var tab = 0
 
-    var body: some View {
-        let buckets = store.catalog?.buckets.filter { $0.kind == .flags } ?? []
-        let active = buckets.first(where: { $0.id == selectedBucket }) ?? buckets.first
-        VStack(spacing: 0) {
-            if let catalog = store.catalog {
-                Text(catalog.fileName)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 8)
-            }
-            ScrollView(.horizontal, showsIndicators: false) {
-                GlassEffectContainer {
-                    HStack(spacing: 8) {
-                        ForEach(buckets) { b in
-                            if b.id == active?.id {
-                                Button(b.title) { selectedBucket = b.id }
-                                    .buttonStyle(.glassProminent)
-                            } else {
-                                Button(b.title) { selectedBucket = b.id }
-                                    .buttonStyle(.glass)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                }
-            }
-            HStack {
-                Image(systemName: "magnifyingglass")
-                TextField("Nome, código ou valor", text: Bindable(store).query)
-                    .textInputAutocapitalization(.never)
-            }
-            .padding(12)
-            .glassEffect(.regular, in: .rect(cornerRadius: 16))
-            .padding(.horizontal, 16)
-            HStack {
-                Toggle("Com nome", isOn: Bindable(store).onlyNamed).toggleStyle(.switch)
-                    .onChange(of: store.onlyNamed) { _, v in if v { store.onlyUnnamed = false } }
-                Toggle("Sem nome", isOn: Bindable(store).onlyUnnamed).toggleStyle(.switch)
-                    .onChange(of: store.onlyUnnamed) { _, v in if v { store.onlyNamed = false } }
-            }
-            .font(.footnote)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 8)
-            if let active, let live = store.liveRoot {
-                FlagList(bucket: active, live: live)
-            }
-        }
-    }
-}
-
-struct FlagList: View {
-    @Environment(AppStore.self) private var store
-    let bucket: Bucket
-    let live: PlistValue
-
-    var rows: [FlagRow] {
+    var filtered: [FlagRow] {
         let q = store.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return bucket.flags.filter { row in
-            let liveVal = live.flagValue(store: bucket.storeKey, code: row.code) ?? row.value
-            let named = store.name(for: row.code)
-            if store.onlyNamed && named == nil { return false }
-            if store.onlyUnnamed && named != nil { return false }
+        return store.allFlags.filter { row in
+            let live = store.liveRoot?.flagValue(store: row.storeKey, code: row.code) ?? row.value
+            let on = isOn(live)
+            if tab == 0 && !on { return false }
+            if tab == 1 && on { return false }
             if q.isEmpty { return true }
-            return row.code.lowercased().contains(q)
-                || (named?.lowercased().contains(q) ?? false)
-                || liveVal.lowercased().contains(q)
+            let named = store.name(for: row.code) ?? ""
+            return row.code.contains(q) || named.lowercased().contains(q) || live.lowercased().contains(q)
         }
     }
 
     var body: some View {
-        List(rows) { row in
-            FlagRowView(bucket: bucket, row: row)
-                .listRowBackground(Color.clear)
+        VStack(spacing: 0) {
+            Picker("", selection: $tab) {
+                Text("Activo").tag(0)
+                Text("Inactivo").tag(1)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(.secondary)
+                TextField("nome ou código", text: Bindable(store).query)
+                    .textInputAutocapitalization(.never)
+                    .font(.system(size: 13))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            List(filtered) { row in
+                FlagLine(row: row)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+            }
+            .listStyle(.plain)
+            .font(.system(size: 13))
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
+        .safeAreaInset(edge: .bottom) {
+            HStack {
+                Text("\(filtered.count) · \(store.namedCount) nomes · \(store.dirtyCount) editados")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Exportar plist", action: onShare)
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.bar)
+        }
+    }
+
+    func isOn(_ v: String) -> Bool {
+        v == "1" || v.lowercased() == "true"
     }
 }
 
-struct FlagRowView: View {
+struct FlagLine: View {
     @Environment(AppStore.self) private var store
-    let bucket: Bucket
     let row: FlagRow
 
-    var live: String {
-        store.liveRoot?.flagValue(store: bucket.storeKey, code: row.code) ?? row.value
-    }
-    var orig: String {
-        store.catalog?.original.flagValue(store: bucket.storeKey, code: row.code) ?? row.value
-    }
+    var live: String { store.liveRoot?.flagValue(store: row.storeKey, code: row.code) ?? row.value }
+    var orig: String { store.catalog?.original.flagValue(store: row.storeKey, code: row.code) ?? row.value }
+    var named: String? { store.name(for: row.code) }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(named ?? "sem nome")
+                    .font(.system(size: 13, weight: named == nil ? .regular : .medium))
+                    .foregroundStyle(named == nil ? .secondary : .primary)
+                    .lineLimit(1)
                 HStack(spacing: 6) {
-                    Text(store.name(for: row.code) ?? "sem nome")
-                        .font(.body.weight(.medium))
-                    if store.name(for: row.code) != nil {
-                        Text("resolvido").font(.caption2).padding(.horizontal, 6).padding(.vertical, 2).glassEffect(.regular, in: .capsule)
-                    }
-                    if row.overlay {
-                        Text("override").font(.caption2).padding(.horizontal, 6).padding(.vertical, 2).glassEffect(.regular, in: .capsule)
-                    }
-                    Text((live == "1" || live == "true") ? "activo" : "inactivo")
-                        .font(.caption2)
-                        .foregroundStyle((live == "1" || live == "true") ? .green : .secondary)
-                    if live != orig {
-                        Text("editado").font(.caption2).foregroundStyle(.orange)
-                    }
+                    Text(row.code).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+                    if row.overlay { Text("ovr").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary) }
+                    if live != orig { Text("edit").font(.system(size: 9, weight: .semibold)).foregroundStyle(.orange) }
                 }
-                Text(row.code + layerHint(row.layer) + (live != orig ? " · era \(orig)" : ""))
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
             }
-            Spacer()
-            if isToggle(live) {
+            Spacer(minLength: 8)
+            if ["0", "1", "true", "false"].contains(live) {
                 Toggle("", isOn: Binding(
                     get: { live == "1" || live == "true" },
                     set: { on in
                         let next: String
-                        if live == "true" || live == "false" {
-                            next = on ? "true" : "false"
-                        } else {
-                            next = on ? "1" : "0"
-                        }
-                        store.setFlag(storeKey: bucket.storeKey, code: row.code, value: next)
+                        if live == "true" || live == "false" { next = on ? "true" : "false" }
+                        else { next = on ? "1" : "0" }
+                        store.setFlag(storeKey: row.storeKey, code: row.code, value: next)
                     }
                 ))
                 .labelsHidden()
+                .scaleEffect(0.8)
             } else {
                 TextField("valor", text: Binding(
                     get: { live },
-                    set: { store.setFlag(storeKey: bucket.storeKey, code: row.code, value: $0) }
+                    set: { store.setFlag(storeKey: row.storeKey, code: row.code, value: $0) }
                 ))
-                .font(.caption.monospaced())
-                .frame(maxWidth: 120)
+                .font(.system(size: 12, design: .monospaced))
                 .multilineTextAlignment(.trailing)
+                .frame(maxWidth: 88)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 1)
+    }
+}
+
+struct MCView: View {
+    @Environment(AppStore.self) private var store
+    var onShareMapping: () -> Void
+    var onShareOverrides: () -> Void
+
+    var configs: [MCConfig] {
+        let q = store.mcQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let src = store.mcConfigs.filter { !$0.name.isEmpty || $0.params.contains { !$0.name.isEmpty } }
+        if q.isEmpty { return src.sorted { $0.configId < $1.configId } }
+        return src.filter {
+            $0.name.lowercased().contains(q)
+                || String($0.configId).contains(q)
+                || $0.params.contains { $0.name.lowercased().contains(q) }
+        }.sorted { $0.configId < $1.configId }
     }
 
-    func isToggle(_ v: String) -> Bool {
-        ["0", "1", "true", "false"].contains(v)
-    }
-
-    func layerHint(_ layer: String) -> String {
-        switch layer {
-        case "personal": return " · pessoal"
-        case "overlay": return " · overlay de grupo (ganha sobre ofrep)"
-        case "ofrep": return " · ofrep (base de grupo)"
-        default: return ""
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(.secondary)
+                TextField("config, id, param", text: Bindable(store).mcQuery)
+                    .textInputAutocapitalization(.never)
+                    .font(.system(size: 13))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            List {
+                ForEach(configs) { cfg in
+                    Section("\(cfg.configId)  \(cfg.name)") {
+                        ForEach(cfg.params.filter { !$0.name.isEmpty }) { p in
+                            MCParamLine(param: p)
+                                .listRowInsets(EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12))
+                        }
+                    }
+                }
+            }
+            .listStyle(.plain)
+            .font(.system(size: 13))
+        }
+        .safeAreaInset(edge: .bottom) {
+            HStack(spacing: 12) {
+                Text("\(store.mcSelected.count) overrides")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("id_name_mapping.json", action: onShareMapping)
+                    .font(.system(size: 12, weight: .semibold))
+                Button("mc_overrides.json", action: onShareOverrides)
+                    .font(.system(size: 12, weight: .semibold))
+                    .disabled(store.mcSelected.isEmpty)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.bar)
         }
     }
 }
 
-struct GlassCard<Content: View>: View {
-    @ViewBuilder var content: Content
+struct MCParamLine: View {
+    @Environment(AppStore.self) private var store
+    let param: MCParam
+
+    var on: Bool { store.mcSelected.contains(param.id) }
+    var value: String { store.mcValues[param.id] ?? param.type.defaultValue }
+
     var body: some View {
-        content
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(param.name)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                Text("\(param.index) · \(param.type.rawValue) · spec \(String(param.specifier, radix: 16))")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 6)
+            if on {
+                if param.type == .bool {
+                    Toggle("", isOn: Binding(
+                        get: { value == "true" || value == "1" },
+                        set: { store.mcValues[param.id] = $0 ? "true" : "false" }
+                    ))
+                    .labelsHidden()
+                    .scaleEffect(0.8)
+                } else {
+                    TextField("", text: Binding(
+                        get: { value },
+                        set: { store.mcValues[param.id] = $0 }
+                    ))
+                    .font(.system(size: 12, design: .monospaced))
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 72)
+                }
+            }
+            Button {
+                store.toggleOverride(param)
+            } label: {
+                Image(systemName: on ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 16))
+                    .foregroundStyle(on ? Color.primary : .tertiary)
+            }
+            .buttonStyle(.plain)
+        }
     }
 }
 

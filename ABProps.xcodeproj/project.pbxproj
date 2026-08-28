@@ -15,6 +15,7 @@
 		A10006 /* MachOExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11006 /* MachOExtractor.swift */; };
 		A10007 /* CSUtil.c in Sources */ = {isa = PBXBuildFile; fileRef = A11008 /* CSUtil.c */; };
 		A10008 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1100B /* Assets.xcassets */; };
+		A10009 /* MobileConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1100C /* MobileConfig.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 		A1100A /* ABProps-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ABProps-Bridging-Header.h"; sourceTree = "<group>"; };
 		A11007 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1100B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A1100C /* MobileConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileConfig.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -60,6 +62,7 @@
 				A11004 /* Plist.swift */,
 				A11005 /* PlistCodec.swift */,
 				A11006 /* MachOExtractor.swift */,
+				A1100C /* MobileConfig.swift */,
 				A11008 /* CSUtil.c */,
 				A11009 /* CSUtil.h */,
 				A1100A /* ABProps-Bridging-Header.h */,
@@ -153,6 +156,7 @@
 				A10004 /* Plist.swift in Sources */,
 				A10005 /* PlistCodec.swift in Sources */,
 				A10006 /* MachOExtractor.swift in Sources */,
+				A10009 /* MobileConfig.swift in Sources */,
 				A10007 /* CSUtil.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
