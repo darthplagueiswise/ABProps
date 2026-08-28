@@ -1,6 +1,6 @@
 import Foundation
 
-/// Focused WAABProperties getter scan. ARM64 encodings only — no LIEF, no Capstone.
+/// Mach-O sections (LIEF/class-dump job) + Capstone ARM64 (`cs_disasm`).
 enum MachOExtractor {
     static let stp: UInt32 = 0xA9BF7BFD
     static let nameRe = try! NSRegularExpression(pattern: "^[a-z][a-z0-9]*(_[a-z0-9]+)+$")
@@ -9,33 +9,51 @@ enum MachOExtractor {
         var byCode: [String: String]
         var named: Int
         var stubCodes: Int
+        var engine: String
+    }
+
+    struct CsLine {
+        var addr: UInt64
+        var mnem: String
+        var op: String
     }
 
     static func extract(_ data: Data) throws -> Result {
-        guard data.count > 16, data[0] == 0xCF, data[1] == 0xFA, data[2] == 0xED, data[3] == 0xFE else {
-            throw EditorError.message("Não é Mach-O arm64. Se for fat, extrai a slice arm64.")
+        if ab_cs_init() != 0 {
+            throw EditorError.message("Capstone falhou a abrir (CS_ARCH_ARM64).")
         }
-        let textEnd = min(data.count, 0x3600000)
+        guard data.count > 16 else {
+            throw EditorError.message("Ficheiro demasiado pequeno.")
+        }
+        let thin = try thinSlice(data)
+        // Scan TEXT via file-offset==VA for this WhatsApp dylib; Capstone decodes each stub.
+        let textEnd = min(thin.count, 0x3600000)
         var pairCount: [String: Int] = [:]
         var samples: [(off: Int, t2: Int, t3: Int, t4: Int)] = []
         var off = 0x4000
         while off + 24 < textEnd {
-            if u32(data, off) != stp {
+            if u32(thin, off) != stp {
                 off += 4
                 continue
             }
-            let t1 = decBl(off + 4, u32(data, off + 4))
-            let t2 = decBl(off + 8, u32(data, off + 8))
-            let t3 = decBl(off + 12, u32(data, off + 12))
-            let t4 = decBl(off + 16, u32(data, off + 16))
-            if let t1, let t2, let t3, let t4, t1 != 0 {
-                let k = "\(t2):\(t4)"
-                pairCount[k, default: 0] += 1
-                samples.append((off, t2, t3, t4))
-                off += 24
+            let lines = disasm(thin, at: off, n: 24, addr: UInt64(off))
+            guard lines.count >= 5,
+                  lines[0].mnem == "stp",
+                  lines[1].mnem == "bl",
+                  lines[2].mnem == "bl",
+                  lines[3].mnem == "bl",
+                  lines[4].mnem == "bl",
+                  let t2 = blImm(lines[2]),
+                  let t3 = blImm(lines[3]),
+                  let t4 = blImm(lines[4])
+            else {
+                off += 4
                 continue
             }
-            off += 4
+            let k = "\(t2):\(t4)"
+            pairCount[k, default: 0] += 1
+            samples.append((off, t2, t3, t4))
+            off += 24
         }
         let top = pairCount.sorted { $0.value > $1.value }.prefix(8)
         var bestMap: [Int: String] = [:]
@@ -44,7 +62,7 @@ enum MachOExtractor {
             guard parts.count == 2, let t2 = Int(parts[0]), let t4 = Int(parts[1]) else { continue }
             var local: [Int: String] = [:]
             for s in samples where s.t2 == t2 && s.t4 == t4 {
-                if let code = extractCode(data, s.t3) {
+                if let code = extractCode(thin, s.t3) {
                     local[s.off] = code
                 }
             }
@@ -53,73 +71,110 @@ enum MachOExtractor {
         var byCode: [String: String] = [:]
         let tags: Set<Int> = [0x100000, 0x200000, 0x300000]
         let dataLo = 0x3A00000
-        let dataHi = min(data.count - 8, 0x4400000)
+        let dataHi = min(thin.count - 8, 0x4400000)
         off = dataLo & ~7
         while off < dataHi {
-            let q = u64(data, off)
+            let q = u64(thin, off)
             let tag = Int(q >> 32)
             let imp = Int(q & 0xFFFF_FFFF)
             if tags.contains(tag), let code = bestMap[imp] {
-                let nq = u64(data, off + 8)
+                let nq = u64(thin, off + 8)
                 let va = Int(nq & 0xF_FFFF_FFFF)
-                if let nm = cstr(data, va), isName(nm) {
+                if let nm = cstr(thin, va), isName(nm) {
                     byCode[code] = nm
                 }
             }
             off += 8
         }
-        return Result(byCode: byCode, named: byCode.count, stubCodes: Set(bestMap.values).count)
+        return Result(
+            byCode: byCode,
+            named: byCode.count,
+            stubCodes: Set(bestMap.values).count,
+            engine: "capstone-arm64"
+        )
     }
 
     private static func extractCode(_ data: Data, _ u: Int) -> String? {
+        guard u + 4 < data.count else { return nil }
+        let helper = disasm(data, at: u, n: 48, addr: UInt64(u))
         var x0: UInt64 = 0
         var helpers: [Int] = []
-        for i in 0..<16 {
-            let pc = u + i * 4
-            guard pc + 4 <= data.count else { break }
-            let w = u32(data, pc)
-            if let mw = decMovWide(w) {
-                let mask: UInt64 = ~(UInt64(0xFFFF) << mw.shift)
-                x0 = (x0 & mask) | (UInt64(mw.imm) << mw.shift)
-            } else if let t = decBl(pc, w) {
-                helpers.append(t)
+        for line in helper {
+            applyMov(&x0, line)
+            if line.mnem == "bl", let t = blImm(line) { helpers.append(t) }
+        }
+        if asciiDigits(x0) == nil {
+            for t in helpers {
+                let extra = disasm(data, at: t, n: 16, addr: UInt64(t))
+                for line in extra { applyMov(&x0, line) }
+                if asciiDigits(x0) != nil { break }
             }
         }
-        for t in helpers {
-            guard t + 4 <= data.count else { continue }
-            if let mw = decMovWide(u32(data, t)), mw.kind == .movk {
-                let mask: UInt64 = ~(UInt64(0xFFFF) << mw.shift)
-                x0 = (x0 & mask) | (UInt64(mw.imm) << mw.shift)
-                break
-            }
+        return asciiDigits(x0)
+    }
+
+    private static func applyMov(_ x0: inout UInt64, _ line: CsLine) {
+        guard line.mnem == "mov" || line.mnem == "movz" || line.mnem == "movk" else { return }
+        guard line.op.hasPrefix("x0") || line.op.hasPrefix("w0") else { return }
+        guard let imm = immOf(line.op) else { return }
+        var shift = 0
+        if let r = line.op.range(of: "lsl #") {
+            shift = Int(line.op[r.upperBound...].prefix(2).filter(\.isNumber)) ?? 0
         }
+        let mask: UInt64 = ~(UInt64(0xFFFF) << UInt64(shift))
+        x0 = (x0 & mask) | (UInt64(imm & 0xFFFF) << UInt64(shift))
+    }
+
+    private static func disasm(_ data: Data, at: Int, n: Int, addr: UInt64) -> [CsLine] {
+        let end = min(at + n, data.count)
+        guard at >= 0, end > at else { return [] }
+        let slice = data.subdata(in: at..<end)
+        var buf = [CChar](repeating: 0, count: 8192)
+        let count = slice.withUnsafeBytes { raw -> Int32 in
+            guard let p = raw.bindMemory(to: UInt8.self).baseAddress else { return 0 }
+            return ab_cs_disasm(p, slice.count, addr, &buf, buf.count)
+        }
+        if count <= 0 { return [] }
+        let text = String(cString: buf)
+        return text.split(separator: "\n").compactMap { line in
+            let parts = line.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
+            guard parts.count >= 2 else { return nil }
+            let addr = UInt64(parts[0], radix: 16) ?? 0
+            let op = parts.count > 2 ? String(parts[2]) : ""
+            return CsLine(addr: addr, mnem: String(parts[1]), op: op)
+        }
+    }
+
+    private static func blImm(_ line: CsLine) -> Int? {
+        guard line.mnem == "bl" || line.mnem == "b" else { return nil }
+        let hex = line.op.replacingOccurrences(of: "#", with: "")
+        if hex.hasPrefix("0x") { return Int(hex.dropFirst(2), radix: 16) }
+        return Int(hex)
+    }
+
+    private static func immOf(_ op: String) -> Int? {
+        guard let hash = op.firstIndex(of: "#") else { return nil }
+        var s = String(op[op.index(after: hash)...])
+        if let comma = s.firstIndex(of: ",") { s = String(s[..<comma]) }
+        s = s.trimmingCharacters(in: .whitespaces)
+        if s.hasPrefix("0x") { return Int(s.dropFirst(2), radix: 16) }
+        return Int(s)
+    }
+
+    private static func thinSlice(_ data: Data) throws -> Data {
+        if data[0] == 0xCF, data[1] == 0xFA, data[2] == 0xED, data[3] == 0xFE { return data }
+        throw EditorError.message("Não é Mach-O arm64. Se for fat, extrai a slice arm64.")
+    }
+
+    private static func asciiDigits(_ x0: UInt64) -> String? {
         var s = ""
         for i in 0..<8 {
             let c = UInt8((x0 >> (i * 8)) & 0xFF)
-            if (48...57).contains(c) { s.append(Character(UnicodeScalar(c))) }
+            if (48...57).contains(c), let u = UnicodeScalar(UInt32(c)) { s.append(Character(u)) }
             else { break }
         }
         return (s.count >= 4 && s.count <= 6) ? s : nil
     }
-
-    private static func decBl(_ pc: Int, _ w: UInt32) -> Int? {
-        guard w >> 26 == 0b100101 else { return nil }
-        var imm = Int(w & 0x3FFFFFF)
-        if imm & 0x2000000 != 0 { imm -= 0x4000000 }
-        return pc + imm * 4
-    }
-
-    private static func decMovWide(_ w: UInt32) -> (kind: Kind, shift: UInt64, imm: UInt64)? {
-        let opc = (w >> 29) & 3
-        let id = (w >> 23) & 0x3F
-        let hw = (w >> 21) & 3
-        let imm16 = (w >> 5) & 0xFFFF
-        let rd = w & 0x1F
-        guard id == 0b100101, rd == 0, opc == 2 || opc == 3 else { return nil }
-        return (opc == 3 ? .movk : .movz, UInt64(hw * 16), UInt64(imm16))
-    }
-
-    private enum Kind { case movz, movk }
 
     private static func u32(_ data: Data, _ off: Int) -> UInt32 {
         guard off + 4 <= data.count else { return 0 }

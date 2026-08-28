@@ -13,6 +13,7 @@
 		A10004 /* Plist.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11004 /* Plist.swift */; };
 		A10005 /* PlistCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11005 /* PlistCodec.swift */; };
 		A10006 /* MachOExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11006 /* MachOExtractor.swift */; };
+		A10007 /* CSUtil.c in Sources */ = {isa = PBXBuildFile; fileRef = A11008 /* CSUtil.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,6 +24,9 @@
 		A11004 /* Plist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Plist.swift; sourceTree = "<group>"; };
 		A11005 /* PlistCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlistCodec.swift; sourceTree = "<group>"; };
 		A11006 /* MachOExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MachOExtractor.swift; sourceTree = "<group>"; };
+		A11008 /* CSUtil.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = CSUtil.c; sourceTree = "<group>"; };
+		A11009 /* CSUtil.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CSUtil.h; sourceTree = "<group>"; };
+		A1100A /* ABProps-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ABProps-Bridging-Header.h"; sourceTree = "<group>"; };
 		A11007 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -54,6 +58,9 @@
 				A11004 /* Plist.swift */,
 				A11005 /* PlistCodec.swift */,
 				A11006 /* MachOExtractor.swift */,
+				A11008 /* CSUtil.c */,
+				A11009 /* CSUtil.h */,
+				A1100A /* ABProps-Bridging-Header.h */,
 				A11007 /* Info.plist */,
 			);
 			path = ABProps;
@@ -142,6 +149,7 @@
 				A10004 /* Plist.swift in Sources */,
 				A10005 /* PlistCodec.swift in Sources */,
 				A10006 /* MachOExtractor.swift in Sources */,
+				A10007 /* CSUtil.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -196,6 +204,19 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ABProps/Info.plist;
+				SWIFT_OBJC_BRIDGING_HEADER = "ABProps/ABProps-Bridging-Header.h";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Vendor/capstone/include",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Vendor/capstone-build",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lcapstone",
+				);
 				INFOPLIST_KEY_CFBundleDisplayName = ABProps;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIFileSharingEnabled = YES;
@@ -223,6 +244,19 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ABProps/Info.plist;
+				SWIFT_OBJC_BRIDGING_HEADER = "ABProps/ABProps-Bridging-Header.h";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Vendor/capstone/include",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Vendor/capstone-build",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lcapstone",
+				);
 				INFOPLIST_KEY_CFBundleDisplayName = ABProps;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIFileSharingEnabled = YES;

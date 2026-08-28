@@ -35,7 +35,7 @@ final class AppStore {
         for (code, name) in result.byCode {
             names[code] = name
         }
-        status = "Framework: \(result.named) nomes · \(result.stubCodes) códigos"
+        status = "Capstone: \(result.named) nomes · \(result.stubCodes) getters"
     }
 
     func loadNameMap(_ data: Data) throws {
