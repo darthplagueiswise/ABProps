@@ -16,6 +16,7 @@
 		A10007 /* CSUtil.c in Sources */ = {isa = PBXBuildFile; fileRef = A11008 /* CSUtil.c */; };
 		A10008 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1100B /* Assets.xcassets */; };
 		A10009 /* MobileConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1100C /* MobileConfig.swift */; };
+		A1000A /* ios-abprops-names.json in Resources */ = {isa = PBXBuildFile; fileRef = A1100D /* ios-abprops-names.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +33,7 @@
 		A11007 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1100B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1100C /* MobileConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileConfig.swift; sourceTree = "<group>"; };
+		A1100D /* ios-abprops-names.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ios-abprops-names.json"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -63,6 +65,7 @@
 				A11005 /* PlistCodec.swift */,
 				A11006 /* MachOExtractor.swift */,
 				A1100C /* MobileConfig.swift */,
+				A1100D /* ios-abprops-names.json */,
 				A11008 /* CSUtil.c */,
 				A11009 /* CSUtil.h */,
 				A1100A /* ABProps-Bridging-Header.h */,
@@ -140,6 +143,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10008 /* Assets.xcassets in Resources */,
+				A1000A /* ios-abprops-names.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

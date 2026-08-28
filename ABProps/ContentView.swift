@@ -199,7 +199,7 @@ struct HomeView: View {
                 Text("Plist e framework. Os dois.")
                     .font(.title.weight(.semibold))
                     .padding(.top, 8)
-                Text("O plist tem os códigos. O SharedModules tem os nomes. Capstone (cs_disasm ARM64) corre no aparelho — a barra DISASSEMBLE mostra o progresso.")
+                Text("O plist só tem IDs. Os nomes vêm dos getters WAABProperties no SharedModules. Esta IPA já traz 535 nomes iOS desta versão — sobe o framework só se mudar de build.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 

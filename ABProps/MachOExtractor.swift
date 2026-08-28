@@ -76,7 +76,7 @@ enum MachOExtractor {
             if local.count > bestMap.count { bestMap = local }
         }
         var byCode: [String: String] = [:]
-        let tags: Set<Int> = [0x100000, 0x200000, 0x300000]
+        let tags: Set<Int> = [0x100000, 0x200000, 0x300000, 0x400000]
         let dataLo = 0x3A00000
         let dataHi = min(thin.count - 8, 0x4400000)
         progress?(88, "Capstone: a ligar nomes…")

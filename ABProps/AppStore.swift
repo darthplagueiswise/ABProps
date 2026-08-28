@@ -35,6 +35,8 @@ final class AppStore {
     var mcMapLoaded = false
     var mcNamesLoaded = 0
 
+    init() { loadBundledNames() }
+
     var dirtyCount: Int {
         guard let catalog, let liveRoot else { return 0 }
         return catalog.changedCount(live: liveRoot)
@@ -115,7 +117,10 @@ final class AppStore {
                     self.busy = false
                     let hit = self.namedInPlist
                     let inj = self.injectCount
-                    let msg = "Disassemble OK · \(result.named) nomes · \(hit) no plist · \(inj) injectáveis"
+                    let msg = "Disassemble OK · \(result.named) getters · \(hit) no assignment · \(inj) sem assignment"
+                    self.disasmStatus = msg
+                    self.status = msg
+                    self.ping(msg)
                     self.disasmStatus = msg
                     self.status = msg
                     self.ping(msg)
@@ -129,6 +134,15 @@ final class AppStore {
                 }
             }
         }
+    }
+
+    func loadBundledNames() {
+        guard let url = Bundle.main.url(forResource: "ios-abprops-names", withExtension: "json"),
+              let data = try? Data(contentsOf: url) else { return }
+        try? loadNameMap(data)
+        namedCount = names.count
+        disasmStatus = "mapa iOS · \(namedCount) getters WAABProperties"
+        status = disasmStatus
     }
 
     func loadNameMap(_ data: Data) throws {
