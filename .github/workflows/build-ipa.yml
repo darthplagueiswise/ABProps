@@ -41,7 +41,10 @@ jobs:
             -DCAPSTONE_ARM64_SUPPORT=ON \
             -DCAPSTONE_AARCH64_SUPPORT=ON
           cmake --build Vendor/capstone-build --config Release -- \
-            -sdk iphoneos -arch arm64 CODE_SIGNING_ALLOWED=NO
+            -sdk iphoneos -arch arm64 \
+            CODE_SIGNING_ALLOWED=NO \
+            GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+            OTHER_CFLAGS="-Wno-error -Wno-shorten-64-to-32"
           LIB=$(find Vendor/capstone-build -name 'libcapstone.a' | head -n 1)
           echo "LIB=$LIB"
           test -f "$LIB"
