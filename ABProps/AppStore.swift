@@ -40,6 +40,8 @@ final class AppStore {
     var mcMapLoaded = false
     var mcNamesLoaded = 0
 
+    var lastFetchedJSON: Data?
+
     init() { loadBundledNames() }
 
     var dirtyCount: Int {
@@ -189,6 +191,47 @@ final class AppStore {
         ping("Custom \(code) = \(val)")
     }
 
+    func fetchWebABProps() {
+        busy = true
+        disasmPct = 1
+        status = "Fetch Web ABProps…"
+        ping("Fetch iniciado (Cobalt / WAWebABPropsConfigs)")
+        Task {
+            do {
+                let map = try await WebABProps.fetch { pct, msg in
+                    DispatchQueue.main.async {
+                        self.disasmPct = pct
+                        self.status = msg
+                    }
+                }
+                let json = try JSONSerialization.data(withJSONObject: map, options: [.sortedKeys])
+                await MainActor.run {
+                    for (code, name) in map { self.names[code] = name }
+                    self.namedCount = self.names.count
+                    self.lastFetchedJSON = json
+                    self.busy = false
+                    self.disasmPct = 100
+                    let msg = "Fetch Web OK · \(map.count) props · mapa \(self.namedCount)"
+                    self.status = msg
+                    self.disasmStatus = msg
+                    self.ping(msg)
+                }
+            } catch {
+                await MainActor.run {
+                    self.busy = false
+                    self.error = error.localizedDescription
+                    self.status = "Fetch falhou"
+                    self.ping("Fetch falhou")
+                }
+            }
+        }
+    }
+
+    func exportNames() throws -> Data {
+        if let lastFetchedJSON { return lastFetchedJSON }
+        return try JSONSerialization.data(withJSONObject: names, options: [.sortedKeys, .prettyPrinted])
+    }
+
     func loadNameMap(_ data: Data) throws {
         var n = 0
         let obj = try JSONSerialization.jsonObject(with: data)
@@ -281,7 +324,7 @@ final class AppStore {
 }
 
 enum FlagTopic: String, CaseIterable, Identifiable {
-    case employee, dogfood, glass, bug, internal, mobileConfig, abprop, aura
+    case employee, dogfood, glass, bug, intern, mobileConfig, abprop, aura
     var id: String { rawValue }
     var label: String {
         switch self {
@@ -289,7 +332,7 @@ enum FlagTopic: String, CaseIterable, Identifiable {
         case .dogfood: "Dogfood"
         case .glass: "Glass"
         case .bug: "Bug"
-        case .internal: "Internal"
+        case .intern: "Internal"
         case .mobileConfig: "MC"
         case .abprop: "ABProp"
         case .aura: "Aura"
@@ -303,7 +346,7 @@ enum FlagTopic: String, CaseIterable, Identifiable {
         case .dogfood: return f.contains("dogfood")
         case .glass: return f.contains("liquidglass") || n.contains("liquid_glass")
         case .bug: return f.contains("bugreport") || f.contains("rageshake") || n.contains("bug_report")
-        case .internal: return f.contains("internalsetting") || f.contains("internaltester") || f.contains("developer") || n.contains("internal_only")
+        case .intern: return f.contains("internalsetting") || f.contains("internaltester") || f.contains("developer") || n.contains("internal_only")
         case .mobileConfig: return f.contains("mobileconfig")
         case .abprop: return f.contains("abprop")
         case .aura: return n.contains("aura") || n.contains("subscrib") || n.contains("_subs")

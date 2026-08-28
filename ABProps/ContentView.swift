@@ -23,7 +23,8 @@ struct ContentView: View {
                                 onPlist: { pickingPlist = true },
                                 onBinary: { pickingBinary = true },
                                 onJSON: { pickingJSON = true },
-                                onMC: { pickingMC = true }
+                                onMC: { pickingMC = true },
+                                onShareNames: shareNames
                             )
                         case .flags:
                             FlagsView(onShare: sharePlist)
@@ -139,6 +140,7 @@ struct ContentView: View {
     }
     func shareMapping() { writeShare(name: "id_name_mapping.json") { try store.exportMapping() } }
     func shareOverrides() { writeShare(name: "mc_overrides.json") { try store.exportOverrides() } }
+    func shareNames() { writeShare(name: "abprops-web.json") { try store.exportNames() } }
 
     func writeShare(name: String, data: () throws -> Data) {
         do {
@@ -218,6 +220,7 @@ struct HomeView: View {
     var onBinary: () -> Void
     var onJSON: () -> Void
     var onMC: () -> Void
+    var onShareNames: () -> Void
 
     var body: some View {
         ScrollView {
@@ -261,6 +264,25 @@ struct HomeView: View {
                     Button("Entrar nas flags") { store.screen = .flags }
                         .buttonStyle(.glassProminent)
                         .frame(maxWidth: .infinity)
+                }
+
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Fetch Web").font(.headline)
+                        Text("Caminho Cobalt: descarrega o JS do WhatsApp Web e lê WAWebABPropsConfigs. Definições (id↔nome), não o assignment da conta.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        HStack {
+                            Button(store.busy ? "A ir buscar…" : "Fetch ABProps") {
+                                store.fetchWebABProps()
+                            }
+                            .buttonStyle(.glassProminent)
+                            .disabled(store.busy)
+                            Button("Descarregar JSON", action: onShareNames)
+                                .buttonStyle(.glass)
+                                .disabled(store.names.isEmpty)
+                        }
+                    }
                 }
 
                 Button("Plist + JSON (vários)", action: onPlist)
