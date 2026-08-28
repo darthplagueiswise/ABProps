@@ -12,6 +12,7 @@ enum AppScreen: Hashable {
 @Observable
 final class AppStore {
     var screen: AppScreen = .home
+    var path: [AppScreen] = []
     var catalog: Catalog?
     var liveRoot: PlistValue?
     var query = ""
@@ -27,7 +28,9 @@ final class AppStore {
     var status = "Aguardando arquivos"
     var disasmStatus = "Capstone ARM64 · parado"
     var disasmPct: Double = 0
-    var busy = false
+    var fetching = false
+    var disassembling = false
+    var busy: Bool { fetching || disassembling }
     var error: String?
     var toast: String?
     var plistName = ""
@@ -110,7 +113,7 @@ final class AppStore {
     }
 
     func loadFramework(_ data: Data) {
-        busy = true
+        disassembling = true
         disasmPct = 2
         disasmStatus = "Capstone: desmontando ARM64…"
         status = "Capstone: desmontando ARM64…"
@@ -129,8 +132,7 @@ final class AppStore {
                     self.namedCount = self.names.count
                     self.stubCount = result.stubCodes
                     self.disasmPct = 100
-                    self.busy = false
-                    let hit = self.namedInPlist
+                    self.disassembling = false
                     let inj = self.injectCount
                     let msg = "Disassemble OK · \(result.named) getters · mapa \(self.namedCount) · \(hit) no assignment"
                     self.disasmStatus = msg
@@ -139,9 +141,7 @@ final class AppStore {
                 }
             } catch {
                 DispatchQueue.main.async {
-                    self.busy = false
-                    self.error = error.localizedDescription
-                    self.status = "Capstone falhou"
+                    self.disassembling = false
                     self.ping("Capstone falhou")
                 }
             }
@@ -217,14 +217,12 @@ final class AppStore {
             liveRoot = scratch
             if plistName.isEmpty { plistName = "fetch.plist" }
         }
-        screen = .flags
+        path = [.flags]
         ping("Patcher · \(allFlags.count) flags · \(namedCount) nomes")
     }
 
     func fetchWebABProps() {
-        busy = true
-        disasmPct = 1
-        status = "Fetch Web ABProps…"
+        fetching = true
         ping("Fetch iniciado (WhatsApp Web)")
         Task {
             do {
@@ -246,8 +244,7 @@ final class AppStore {
                     self.namedCount = self.names.count
                     self.lastFetchedJSON = json
                     self.fetched = true
-                    self.busy = false
-                    self.disasmPct = 100
+                    self.fetching = false
                     let msg = "Fetch Web OK · \(result.count) props · mapa \(self.namedCount)"
                     self.status = msg
                     self.disasmStatus = msg
@@ -255,9 +252,7 @@ final class AppStore {
                 }
             } catch {
                 await MainActor.run {
-                    self.busy = false
-                    self.error = error.localizedDescription
-                    self.status = "Fetch falhou"
+                    self.fetching = false
                     self.ping("Fetch falhou")
                 }
             }
@@ -407,7 +402,7 @@ enum FlagKind: String {
         let n = name.lowercased()
         let intTok = ["duration", "count", "size", "length", "timeout", "delay", "limit", "ttl",
                       "days", "hours", "_ms", "interval", "quota", "threshold", "offset",
-                      "retries", "capacity", "width", "height", "bytes"]
+                      "retries", "capacity", "width", "height", "bytes", "opacity", "level"]
         if intTok.contains(where: { n.contains($0) }) { return .int }
         if ["ratio", "scale", "multiplier", "factor", "weight"].contains(where: { n.contains($0) }) { return .float }
         if ["url", "uri", "token", "content", "text", "string", "hash", "json", "prefix", "suffix", "path", "host"].contains(where: { n.contains($0) })
