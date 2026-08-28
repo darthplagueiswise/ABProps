@@ -133,7 +133,7 @@ final class AppStore {
                     self.stubCount = result.stubCodes
                     self.disasmPct = 100
                     self.disassembling = false
-                    let inj = self.injectCount
+                    let hit = self.namedInPlist
                     let msg = "Disassemble OK · \(result.named) getters · mapa \(self.namedCount) · \(hit) no assignment"
                     self.disasmStatus = msg
                     self.status = msg
@@ -142,6 +142,8 @@ final class AppStore {
             } catch {
                 DispatchQueue.main.async {
                     self.disassembling = false
+                    self.error = error.localizedDescription
+                    self.status = "Capstone falhou"
                     self.ping("Capstone falhou")
                 }
             }
