@@ -63,7 +63,7 @@ struct ContentView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     if store.screen == .flags {
-                        Button("Guardar") { sharePlist() }
+                        Button("Salvar") { sharePlist() }
                             .buttonStyle(.glassProminent)
                     }
                 }
@@ -228,7 +228,7 @@ struct HomeView: View {
                 Text("Plist e framework. Os dois.")
                     .font(.title.weight(.semibold))
                     .padding(.top, 8)
-                Text("O plist só tem IDs. Os nomes vêm do Cobalt (WAWebABPropsConfigs, 1708) + getters iOS. Esta IPA já traz 2167 nomes — podes somar mais JSON em cima.")
+                Text("O plist só tem IDs. Os nomes vêm do Cobalt (WAWebABPropsConfigs, 1708) + getters iOS. Esta IPA já traz 2167 nomes — dá pra somar mais JSON em cima.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
@@ -252,7 +252,7 @@ struct HomeView: View {
                                     .font(.caption.monospaced())
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
-                                Button(store.busy ? "A desmontar…" : "Subir framework", action: onBinary)
+                                Button(store.busy ? "Desmontando…" : "Enviar framework", action: onBinary)
                                     .buttonStyle(.glassProminent)
                                     .disabled(store.busy)
                             }
@@ -269,16 +269,16 @@ struct HomeView: View {
                 GlassCard {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Fetch Web").font(.headline)
-                        Text("Caminho Cobalt: descarrega o JS do WhatsApp Web e lê WAWebABPropsConfigs. Definições (id↔nome), não o assignment da conta.")
+                        Text("Mesmo caminho do Cobalt: baixa o JS do WhatsApp Web e lê WAWebABPropsConfigs. São as definições (id↔nome), não o assignment da conta.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         HStack {
-                            Button(store.busy ? "A ir buscar…" : "Fetch ABProps") {
+                            Button(store.busy ? "Buscando…" : "Fetch ABProps") {
                                 store.fetchWebABProps()
                             }
                             .buttonStyle(.glassProminent)
                             .disabled(store.busy)
-                            Button("Descarregar JSON", action: onShareNames)
+                            Button("Baixar JSON", action: onShareNames)
                                 .buttonStyle(.glass)
                                 .disabled(store.names.isEmpty)
                         }
@@ -313,7 +313,7 @@ struct HomeView: View {
                                 .padding(8)
                                 .glassEffect(.regular, in: .rect(cornerRadius: 10))
                         }
-                        Button("Injectar custom") {
+                        Button("Injetar custom") {
                             store.addCustom()
                             if store.catalog != nil { store.screen = .flags }
                         }
@@ -327,11 +327,11 @@ struct HomeView: View {
                         Text("params_map.txt + params_names_v4_u*.txt → id_name_mapping.json. Hex = IDs; tipo vazio/8/c/10 = bool/int/string/double.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text(store.mcMapLoaded ? "\(store.mcConfigs.count) configs · \(store.mcNamesLoaded) name files" : "ainda nada")
+                        Text(store.mcMapLoaded ? "\(store.mcConfigs.count) configs · \(store.mcNamesLoaded) arquivos de nome" : "nada ainda")
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
                         HStack {
-                            Button("Subir ficheiros", action: onMC).buttonStyle(.glassProminent)
+                            Button("Enviar arquivos", action: onMC).buttonStyle(.glassProminent)
                             Button("Abrir mapping") { store.screen = .mobileConfig }
                                 .buttonStyle(.glass)
                                 .disabled(store.mcConfigs.isEmpty)
@@ -375,8 +375,8 @@ struct FlagsView: View {
         VStack(spacing: 0) {
             VStack(spacing: 8) {
                 Picker("", selection: $tab) {
-                    Text("Activo").tag(0)
-                    Text("Inactivo").tag(1)
+                    Text("Ativo").tag(0)
+                    Text("Inativo").tag(1)
                 }
                 .pickerStyle(.segmented)
 
@@ -405,10 +405,10 @@ struct FlagsView: View {
                                 .buttonStyle(.glass)
                             }
                             if store.onlyInject {
-                                Button("Injectar \(store.injectCount)") { store.onlyInject = false }
+                                Button("Injetar \(store.injectCount)") { store.onlyInject = false }
                                     .buttonStyle(.glassProminent)
                             } else {
-                                Button("Injectar \(store.injectCount)") {
+                                Button("Injetar \(store.injectCount)") {
                                     store.onlyInject = true
                                     store.onlyUnnamed = false
                                     store.onlyNamed = true

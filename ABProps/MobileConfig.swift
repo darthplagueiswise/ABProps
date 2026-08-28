@@ -115,7 +115,7 @@ enum MobileConfig {
             if let arr = dict["id_name_mapping"] as? [String] { return arr }
             if let arr = dict["mapping"] as? [String] { return arr }
         }
-        throw EditorError.message("JSON de nomes inválido (espera array de strings).")
+        throw EditorError.message("JSON de nomes inválido (espera um array de strings).")
     }
 
     static func applyNames(_ lines: [String], onto configs: inout [MCConfig]) {

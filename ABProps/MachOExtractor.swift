@@ -20,14 +20,14 @@ enum MachOExtractor {
 
     static func extract(_ data: Data, progress: ((Double, String) -> Void)? = nil) throws -> Result {
         if ab_cs_init() != 0 {
-            throw EditorError.message("Capstone falhou a abrir (CS_ARCH_ARM64).")
+            throw EditorError.message("Capstone falhou ao abrir (CS_ARCH_ARM64).")
         }
         guard data.count > 16 else {
-            throw EditorError.message("Ficheiro demasiado pequeno.")
+            throw EditorError.message("Arquivo pequeno demais.")
         }
         let thin = try thinSlice(data)
         let textEnd = min(thin.count, 0x3600000)
-        progress?(4, "Capstone: a varrer stubs…")
+        progress?(4, "Capstone: varrendo stubs…")
         var pairCount: [String: Int] = [:]
         var samples: [(off: Int, t2: Int, t3: Int, t4: Int)] = []
         var off = 0x4000
@@ -62,7 +62,7 @@ enum MachOExtractor {
             off += 24
         }
         let top = pairCount.sorted { $0.value > $1.value }.prefix(8)
-        progress?(78, "Capstone: a ler códigos…")
+        progress?(78, "Capstone: lendo códigos…")
         var bestMap: [Int: String] = [:]
         for (k, _) in top {
             let parts = k.split(separator: ":")
@@ -79,7 +79,7 @@ enum MachOExtractor {
         let tags: Set<Int> = [0x100000, 0x200000, 0x300000, 0x400000]
         let dataLo = 0x3A00000
         let dataHi = min(thin.count - 8, 0x4400000)
-        progress?(88, "Capstone: a ligar nomes…")
+        progress?(88, "Capstone: ligando nomes…")
         off = dataLo & ~7
         while off < dataHi {
             let q = u64(thin, off)
@@ -171,7 +171,7 @@ enum MachOExtractor {
 
     private static func thinSlice(_ data: Data) throws -> Data {
         if data[0] == 0xCF, data[1] == 0xFA, data[2] == 0xED, data[3] == 0xFE { return data }
-        throw EditorError.message("Não é Mach-O arm64. Se for fat, extrai a slice arm64.")
+        throw EditorError.message("Não é Mach-O arm64. Se for fat, extraia a slice arm64.")
     }
 
     private static func asciiDigits(_ x0: UInt64) -> String? {

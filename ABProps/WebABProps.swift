@@ -42,7 +42,7 @@ enum WebABProps {
             if merged.count >= 80 { break }
         }
         if merged.isEmpty {
-            throw EditorError.message("ABPropConfigs não apareceu nos JS. Tenta de novo em Wi-Fi.")
+            throw EditorError.message("ABPropConfigs não apareceu nos JS. Tenta de novo no Wi-Fi.")
         }
         progress(100, "Fetch OK · \(merged.count) props")
         return merged

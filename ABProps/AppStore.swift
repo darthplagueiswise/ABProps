@@ -23,7 +23,7 @@ final class AppStore {
     var customName = ""
     var customValue = "1"
     var names: [String: String] = [:]
-    var status = "À espera de ficheiros"
+    var status = "Aguardando arquivos"
     var disasmStatus = "Capstone ARM64 · parado"
     var disasmPct: Double = 0
     var busy = false
@@ -104,8 +104,8 @@ final class AppStore {
     func loadFramework(_ data: Data) {
         busy = true
         disasmPct = 2
-        disasmStatus = "Capstone: a desmontar ARM64…"
-        status = "Capstone: a desmontar ARM64…"
+        disasmStatus = "Capstone: desmontando ARM64…"
+        status = "Capstone: desmontando ARM64…"
         ping("Capstone iniciado · \(data.count / 1_000_000) MB")
         error = nil
         DispatchQueue.global(qos: .userInitiated).async {
@@ -173,7 +173,7 @@ final class AppStore {
     func addCustom() {
         let code = customCode.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty, code.allSatisfy(\.isNumber) else {
-            error = "Código tem de ser numérico (ex. 1777)."
+            error = "Código tem que ser numérico (ex. 1777)."
             return
         }
         let label = customName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -184,7 +184,7 @@ final class AppStore {
         if val.isEmpty { val = "1" }
         Keyboard.hide()
         if liveRoot == nil {
-            ping("\(code) no mapa — abre um plist para gravar")
+            ping("\(code) no mapa — abre um plist pra salvar")
             return
         }
         setFlag(storeKey: personalStore, code: code, value: val)

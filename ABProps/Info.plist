@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>pt</string>
+	<string>pt-BR</string>
 	<key>CFBundleDisplayName</key>
 	<string>ABProps</string>
 	<key>CFBundleExecutable</key>
