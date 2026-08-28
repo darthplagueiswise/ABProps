@@ -1,0 +1,62 @@
+name: Build IPA (iOS SDK 26)
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: SDK 26 unsigned IPA
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          ls /Applications | grep -i xcode || true
+          if [ -d /Applications/Xcode_26.6.app ]; then sudo xcode-select -s /Applications/Xcode_26.6.app
+          elif [ -d /Applications/Xcode_26.app ]; then sudo xcode-select -s /Applications/Xcode_26.app
+          elif [ -d /Applications/Xcode.app ]; then sudo xcode-select -s /Applications/Xcode.app
+          fi
+          xcode-select -p
+          xcodebuild -version
+          echo "iphoneos SDK=$(xcrun --sdk iphoneos --show-sdk-version)"
+          xcodebuild -showsdks | grep iphoneos
+
+      - name: Build for device (unsigned)
+        run: |
+          mkdir -p build
+          xcodebuild \
+            -project ABProps.xcodeproj \
+            -scheme ABProps \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            DEVELOPMENT_TEAM= \
+            IPHONEOS_DEPLOYMENT_TARGET=26.0 \
+            build
+
+      - name: Pack IPA
+        run: |
+          APP=$(find build/DerivedData/Build/Products -name 'ABProps.app' | head -n 1)
+          echo "APP=$APP"
+          test -d "$APP"
+          rm -rf Payload ABProps.ipa
+          mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry ABProps.ipa Payload
+          ls -lh ABProps.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ABProps.ipa
+          path: ABProps.ipa
+          if-no-files-found: error
