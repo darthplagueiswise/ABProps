@@ -8,13 +8,7 @@ static int g_ok = 0;
 
 int ab_cs_init(void) {
     if (g_ok) return 0;
-    cs_err e = cs_open(
-#ifdef CS_ARCH_AARCH64
-        CS_ARCH_AARCH64,
-#else
-        CS_ARCH_ARM64,
-#endif
-        CS_MODE_ARM, &g_handle);
+    cs_err e = cs_open(CS_ARCH_AARCH64, CS_MODE_ARM, &g_handle);
     if (e != CS_ERR_OK) return (int)e;
     cs_option(g_handle, CS_OPT_SYNTAX, CS_OPT_SYNTAX_DEFAULT);
     g_ok = 1;
