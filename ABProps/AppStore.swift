@@ -42,6 +42,7 @@ final class AppStore {
     var mcNamesLoaded = 0
 
     var lastFetchedJSON: Data?
+    var fetched = false
 
     init() { loadBundledNames() }
 
@@ -56,11 +57,12 @@ final class AppStore {
     }
 
     var allFlags: [FlagRow] {
-        guard let catalog else { return [] }
         var best: [String: FlagRow] = [:]
-        let order = catalog.buckets.filter { $0.kind == .flags }.sorted { Catalog.weight($0.storeKey) < Catalog.weight($1.storeKey) }
-        for b in order {
-            for r in b.flags { best[r.code] = r }
+        if let catalog {
+            let order = catalog.buckets.filter { $0.kind == .flags }.sorted { Catalog.weight($0.storeKey) < Catalog.weight($1.storeKey) }
+            for b in order {
+                for r in b.flags { best[r.code] = r }
+            }
         }
         let storeKey = personalStore
         for (code, _) in names where best[code] == nil {
@@ -197,6 +199,28 @@ final class AppStore {
         ping("Custom \(code) = \(val)")
     }
 
+    func openPatcher() {
+        if catalog == nil || liveRoot == nil {
+            let scratch = PlistValue.dict([
+                ("abp.pnonep", .nested(.dict([]))),
+            ])
+            catalog = Catalog(
+                root: scratch,
+                original: scratch,
+                originalRaw: scratch,
+                originalBytes: nil,
+                fileName: "fetch.plist",
+                buckets: [
+                    Bucket(id: "abp.pnonep", title: "personal", kind: .flags, storeKey: "abp.pnonep", flags: []),
+                ]
+            )
+            liveRoot = scratch
+            if plistName.isEmpty { plistName = "fetch.plist" }
+        }
+        screen = .flags
+        ping("Patcher · \(allFlags.count) flags · \(namedCount) nomes")
+    }
+
     func fetchWebABProps() {
         busy = true
         disasmPct = 1
@@ -221,6 +245,7 @@ final class AppStore {
                     }
                     self.namedCount = self.names.count
                     self.lastFetchedJSON = json
+                    self.fetched = true
                     self.busy = false
                     self.disasmPct = 100
                     let msg = "Fetch Web OK · \(result.count) props · mapa \(self.namedCount)"

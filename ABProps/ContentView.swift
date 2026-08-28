@@ -232,6 +232,10 @@ struct HomeView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
+                Button("Entrar no patcher") { store.openPatcher() }
+                    .buttonStyle(.glassProminent)
+                    .frame(maxWidth: .infinity)
+
                 GlassEffectContainer {
                     HStack(spacing: 12) {
                         GlassCard {
@@ -260,12 +264,6 @@ struct HomeView: View {
                     }
                 }
 
-                if store.catalog != nil {
-                    Button("Entrar nas flags") { store.screen = .flags }
-                        .buttonStyle(.glassProminent)
-                        .frame(maxWidth: .infinity)
-                }
-
                 GlassCard {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Fetch Web").font(.headline)
@@ -282,6 +280,10 @@ struct HomeView: View {
                                 .buttonStyle(.glass)
                                 .disabled(store.names.isEmpty)
                         }
+                        Button("Entrar no patcher") { store.openPatcher() }
+                            .buttonStyle(.glassProminent)
+                            .frame(maxWidth: .infinity)
+                            .disabled(store.names.isEmpty && store.catalog == nil)
                     }
                 }
 
@@ -315,7 +317,7 @@ struct HomeView: View {
                         }
                         Button("Injetar custom") {
                             store.addCustom()
-                            if store.catalog != nil { store.screen = .flags }
+                            store.openPatcher()
                         }
                         .buttonStyle(.glassProminent)
                     }
