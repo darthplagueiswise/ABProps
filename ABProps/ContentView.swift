@@ -490,6 +490,12 @@ struct FlagLine: View {
                 Text(row.code)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
+                Text(store.kind(for: row.code).label)
+                    .font(.caption2.weight(.semibold).monospaced())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .glassEffect(.regular, in: .capsule)
                 if row.overlay {
                     Text("ovr")
                         .font(.caption2.weight(.semibold))
@@ -519,12 +525,13 @@ struct FlagLine: View {
 
     @ViewBuilder
     var control: some View {
-        if ["0", "1", "true", "false"].contains(live) {
+        switch store.kind(for: row.code) {
+        case .bool:
             Toggle("", isOn: Binding(
-                get: { live == "1" || live == "true" },
+                get: { live == "1" || live.lowercased() == "true" },
                 set: { on in
                     let next: String
-                    if live == "true" || live == "false" { next = on ? "true" : "false" }
+                    if live.lowercased() == "true" || live.lowercased() == "false" { next = on ? "true" : "false" }
                     else { next = on ? "1" : "0" }
                     store.setFlag(storeKey: row.storeKey, code: row.code, value: next)
                 }
@@ -532,17 +539,20 @@ struct FlagLine: View {
             .labelsHidden()
             .tint(Color.cyan)
             .fixedSize()
-        } else {
-            TextField("valor", text: Binding(
+        case .int, .float, .double, .string:
+            TextField(store.kind(for: row.code) == .string ? "texto" : "0", text: Binding(
                 get: { live },
                 set: { store.setFlag(storeKey: row.storeKey, code: row.code, value: $0) }
             ))
+            .keyboardType(store.kind(for: row.code) == .string ? .default : (store.kind(for: row.code) == .int ? .numberPad : .decimalPad))
             .font(.caption.monospaced())
             .multilineTextAlignment(.trailing)
-            .frame(minWidth: 52, maxWidth: 96)
+            .frame(minWidth: 56, maxWidth: store.kind(for: row.code) == .string ? 140 : 88)
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .glassEffect(.regular, in: .rect(cornerRadius: 8))
+            .submitLabel(.done)
+            .onSubmit { Keyboard.hide() }
         }
     }
 }

@@ -8,7 +8,7 @@ enum WebABProps {
     static let home = URL(string: "https://web.whatsapp.com/")!
     static let chromeUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
-    static func fetch(progress: @escaping (Double, String) -> Void) async throws -> [String: String] {
+    static func fetch(progress: @escaping (Double, String) -> Void) async throws -> [String: WebProp] {
         progress(4, "Abrindo WhatsApp Web (desktop)…")
         let html = try await DesktopPage.load(progress: progress)
         let urls = jsURLs(in: html)
@@ -17,14 +17,14 @@ enum WebABProps {
         }
         progress(20, "Web OK · \(urls.count) JS · baixando…")
 
-        var merged: [String: String] = [:]
+        var merged: [String: WebProp] = [:]
         var done = 0
         var idx = 0
         while idx < urls.count, merged.count < 80 {
             let end = min(idx + 8, urls.count)
             let batch = Array(urls[idx..<end])
             idx = end
-            try await withThrowingTaskGroup(of: [String: String].self) { group in
+            try await withThrowingTaskGroup(of: [String: WebProp].self) { group in
                 for url in batch {
                     group.addTask { parseJS((try? await getJS(url)) ?? "") }
                 }
@@ -44,8 +44,13 @@ enum WebABProps {
         return merged
     }
 
-    static func parseJS(_ js: String) -> [String: String] {
-        var map: [String: String] = [:]
+    struct WebProp {
+        var name: String
+        var type: String
+    }
+
+    static func parseJS(_ js: String) -> [String: WebProp] {
+        var map: [String: WebProp] = [:]
         if let blob = objectBlob(in: js) { fill(&map, from: blob) }
         if map.count < 40 { fill(&map, from: js) }
         return map
@@ -127,11 +132,14 @@ enum WebABProps {
         return nil
     }
 
-    private static func fill(_ map: inout [String: String], from blob: String) {
+    private static func fill(_ map: inout [String: WebProp], from blob: String) {
         let re = try! NSRegularExpression(pattern: #"([A-Za-z0-9_]+):\[(\d+),\"?(bool|int|float|string)\"?,"#)
         let ns = blob as NSString
         for m in re.matches(in: blob, range: NSRange(location: 0, length: ns.length)) {
-            map[ns.substring(with: m.range(at: 2))] = ns.substring(with: m.range(at: 1))
+            let name = ns.substring(with: m.range(at: 1))
+            let code = ns.substring(with: m.range(at: 2))
+            let type = ns.substring(with: m.range(at: 3))
+            map[code] = WebProp(name: name, type: type)
         }
     }
 }

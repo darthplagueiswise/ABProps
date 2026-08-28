@@ -23,6 +23,7 @@ final class AppStore {
     var customName = ""
     var customValue = "1"
     var names: [String: String] = [:]
+    var types: [String: FlagKind] = [:]
     var status = "Aguardando arquivos"
     var disasmStatus = "Capstone ARM64 · parado"
     var disasmPct: Double = 0
@@ -46,7 +47,12 @@ final class AppStore {
 
     var dirtyCount: Int {
         guard let catalog, let liveRoot else { return 0 }
-        return catalog.changedCount(live: liveRoot)
+        var n = catalog.changedCount(live: liveRoot)
+        for row in allFlags where row.layer == "inject" {
+            let live = liveRoot.flagValue(store: row.storeKey, code: row.code) ?? row.value
+            if live != row.value { n += 1 }
+        }
+        return n
     }
 
     var allFlags: [FlagRow] {
@@ -195,23 +201,29 @@ final class AppStore {
         busy = true
         disasmPct = 1
         status = "Fetch Web ABProps…"
-        ping("Fetch iniciado (Cobalt / WAWebABPropsConfigs)")
+        ping("Fetch iniciado (WhatsApp Web)")
         Task {
             do {
-                let map = try await WebABProps.fetch { pct, msg in
+                let result = try await WebABProps.fetch { pct, msg in
                     DispatchQueue.main.async {
                         self.disasmPct = pct
                         self.status = msg
                     }
                 }
-                let json = try JSONSerialization.data(withJSONObject: map, options: [.sortedKeys])
+                let json = try JSONSerialization.data(
+                    withJSONObject: result.mapValues { ["n": $0.name, "t": $0.type] },
+                    options: [.sortedKeys]
+                )
                 await MainActor.run {
-                    for (code, name) in map { self.names[code] = name }
+                    for (code, prop) in result {
+                        self.names[code] = prop.name
+                        self.types[code] = FlagKind.parse(prop.type)
+                    }
                     self.namedCount = self.names.count
                     self.lastFetchedJSON = json
                     self.busy = false
                     self.disasmPct = 100
-                    let msg = "Fetch Web OK · \(map.count) props · mapa \(self.namedCount)"
+                    let msg = "Fetch Web OK · \(result.count) props · mapa \(self.namedCount)"
                     self.status = msg
                     self.disasmStatus = msg
                     self.ping(msg)
@@ -253,9 +265,14 @@ final class AppStore {
                 } else if let arr = value as? [Any], let name = arr.first as? String {
                     names[code] = name
                     n += 1
-                } else if let nested = value as? [String: Any], let name = nested["n"] as? String {
-                    names[code] = name
-                    n += 1
+                } else if let nested = value as? [String: Any] {
+                    if let name = nested["n"] as? String {
+                        names[code] = name
+                        n += 1
+                    }
+                    if let t = nested["t"] as? String {
+                        types[code] = FlagKind.parse(t)
+                    }
                 }
             }
         } else {
@@ -314,12 +331,50 @@ final class AppStore {
 
     func name(for code: String) -> String? { names[code] }
 
+    func kind(for code: String) -> FlagKind {
+        if let t = types[code] { return t }
+        if let n = names[code] { return FlagKind.infer(from: n) }
+        return .bool
+    }
+
     func ping(_ msg: String) {
         toast = msg
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 3_200_000_000)
             if toast == msg { toast = nil }
         }
+    }
+}
+
+enum FlagKind: String {
+    case bool, int, string, float, double
+    var label: String {
+        switch self {
+        case .bool: "bool"
+        case .int: "int"
+        case .string: "str"
+        case .float, .double: "num"
+        }
+    }
+    static func parse(_ raw: String) -> FlagKind {
+        switch raw.lowercased() {
+        case "bool", "boolean": .bool
+        case "int", "integer", "long": .int
+        case "float", "double", "number": .float
+        case "string", "str", "json": .string
+        default: .bool
+        }
+    }
+    static func infer(from name: String) -> FlagKind {
+        let n = name.lowercased()
+        let intTok = ["duration", "count", "size", "length", "timeout", "delay", "limit", "ttl",
+                      "days", "hours", "_ms", "interval", "quota", "threshold", "offset",
+                      "retries", "capacity", "width", "height", "bytes"]
+        if intTok.contains(where: { n.contains($0) }) { return .int }
+        if ["ratio", "scale", "multiplier", "factor", "weight"].contains(where: { n.contains($0) }) { return .float }
+        if ["url", "uri", "token", "content", "text", "string", "hash", "json", "prefix", "suffix", "path", "host"].contains(where: { n.contains($0) })
+            && !n.hasSuffix("_enabled") { return .string }
+        return .bool
     }
 }
 
