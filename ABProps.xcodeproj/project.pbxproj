@@ -127,7 +127,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
-				pt,
+				"pt-BR",
 				Base,
 			);
 			mainGroup = A14000;

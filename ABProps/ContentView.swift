@@ -269,7 +269,7 @@ struct HomeView: View {
                 GlassCard {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Fetch Web").font(.headline)
-                        Text("Mesmo caminho do Cobalt: baixa o JS do WhatsApp Web e lê WAWebABPropsConfigs. São as definições (id↔nome), não o assignment da conta.")
+                        Text("Abre o WhatsApp Web num WebView desktop (igual o Cobalt faz com browser) e lê WAWebABPropsConfigs no JS. Sem fallback — é o fetch real.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         HStack {
