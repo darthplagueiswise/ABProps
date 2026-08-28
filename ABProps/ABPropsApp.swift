@@ -8,6 +8,7 @@ struct ABPropsApp: App {
         WindowGroup {
             ContentView()
                 .environment(store)
+                .preferredColorScheme(.dark)
         }
     }
 }

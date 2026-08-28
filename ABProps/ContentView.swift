@@ -65,6 +65,7 @@ struct ContentView: View {
                 }
             }
         }
+        .preferredColorScheme(.dark)
         .fileImporter(isPresented: $pickingPlist, allowedContentTypes: [.item, .propertyList, .data]) { ingest($0, .plist) }
         .fileImporter(isPresented: $pickingBinary, allowedContentTypes: [.item, .data, .unixExecutable]) { ingest($0, .binary) }
         .fileImporter(isPresented: $pickingJSON, allowedContentTypes: [.json, .item]) { ingest($0, .json) }
@@ -132,23 +133,23 @@ struct BackgroundMesh: View {
         let dark = scheme == .dark
         LinearGradient(
             colors: dark
-                ? [Color(red: 0.06, green: 0.07, blue: 0.12), Color(red: 0.10, green: 0.13, blue: 0.20), Color(red: 0.04, green: 0.05, blue: 0.07)]
-                : [Color(red: 0.90, green: 0.93, blue: 0.98), Color(red: 0.82, green: 0.88, blue: 0.96), Color(red: 0.94, green: 0.95, blue: 0.97)],
+                ? [Color(red: 0.02, green: 0.02, blue: 0.025), Color(red: 0.04, green: 0.045, blue: 0.055), Color(red: 0.0, green: 0.0, blue: 0.0)]
+                : [Color(red: 0.12, green: 0.13, blue: 0.15), Color(red: 0.08, green: 0.09, blue: 0.10), Color(red: 0.05, green: 0.05, blue: 0.06)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
         .ignoresSafeArea()
         .overlay {
             Circle()
-                .fill(Color.cyan.opacity(dark ? 0.22 : 0.18))
-                .frame(width: 280, height: 280)
-                .blur(radius: 64)
-                .offset(x: -90, y: -200)
+                .fill(Color.cyan.opacity(dark ? 0.06 : 0.05))
+                .frame(width: 240, height: 240)
+                .blur(radius: 80)
+                .offset(x: -110, y: -220)
             Circle()
-                .fill(Color.indigo.opacity(dark ? 0.26 : 0.16))
-                .frame(width: 320, height: 320)
-                .blur(radius: 72)
-                .offset(x: 130, y: 280)
+                .fill(Color.white.opacity(dark ? 0.03 : 0.04))
+                .frame(width: 280, height: 280)
+                .blur(radius: 90)
+                .offset(x: 140, y: 300)
         }
     }
 }
