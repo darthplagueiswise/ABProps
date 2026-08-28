@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import UniformTypeIdentifiers
+import UIKit
 
 enum AppScreen: Hashable {
     case home
@@ -17,6 +18,10 @@ final class AppStore {
     var onlyNamed = false
     var onlyUnnamed = false
     var onlyInject = false
+    var topic: FlagTopic?
+    var customCode = ""
+    var customName = ""
+    var customValue = "1"
     var names: [String: String] = [:]
     var status = "À espera de ficheiros"
     var disasmStatus = "Capstone ARM64 · parado"
@@ -111,16 +116,13 @@ final class AppStore {
                 }
                 DispatchQueue.main.async {
                     for (code, name) in result.byCode { self.names[code] = name }
-                    self.namedCount = result.named
+                    self.namedCount = self.names.count
                     self.stubCount = result.stubCodes
                     self.disasmPct = 100
                     self.busy = false
                     let hit = self.namedInPlist
                     let inj = self.injectCount
-                    let msg = "Disassemble OK · \(result.named) getters · \(hit) no assignment · \(inj) sem assignment"
-                    self.disasmStatus = msg
-                    self.status = msg
-                    self.ping(msg)
+                    let msg = "Disassemble OK · \(result.named) getters · mapa \(self.namedCount) · \(hit) no assignment"
                     self.disasmStatus = msg
                     self.status = msg
                     self.ping(msg)
@@ -141,27 +143,83 @@ final class AppStore {
               let data = try? Data(contentsOf: url) else { return }
         try? loadNameMap(data)
         namedCount = names.count
-        disasmStatus = "mapa iOS · \(namedCount) getters WAABProperties"
+        disasmStatus = "mapa Cobalt+iOS · \(namedCount) nomes"
         status = disasmStatus
     }
 
+    func ingestAny(_ data: Data, name: String) throws {
+        let lower = name.lowercased()
+        if data.count >= 8, data.starts(with: [0x62, 0x70, 0x6c, 0x69, 0x73, 0x74]) {
+            try loadPlist(data, name: name)
+            return
+        }
+        if data.count >= 4, data[0] == 0xCF, data[1] == 0xFA, data[2] == 0xED, data[3] == 0xFE {
+            loadFramework(data)
+            return
+        }
+        if lower.hasSuffix(".json") || data.first == 0x7B || data.first == 0x5B {
+            try loadNameMap(data)
+            return
+        }
+        if lower.contains("sharedmodules") || (lower.contains("whatsapp") && data.count > 1_000_000) {
+            loadFramework(data)
+            return
+        }
+        try ingestMobileConfig(data, name: name)
+    }
+
+    func addCustom() {
+        let code = customCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty, code.allSatisfy(\.isNumber) else {
+            error = "Código tem de ser numérico (ex. 1777)."
+            return
+        }
+        let label = customName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !label.isEmpty { names[code] = label }
+        else if names[code] == nil { names[code] = "custom_\(code)" }
+        namedCount = names.count
+        var val = customValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if val.isEmpty { val = "1" }
+        Keyboard.hide()
+        if liveRoot == nil {
+            ping("\(code) no mapa — abre um plist para gravar")
+            return
+        }
+        setFlag(storeKey: personalStore, code: code, value: val)
+        ping("Custom \(code) = \(val)")
+    }
+
     func loadNameMap(_ data: Data) throws {
-        guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        var n = 0
+        let obj = try JSONSerialization.jsonObject(with: data)
+        if let arr = obj as? [Any] {
+            for item in arr {
+                guard let s = item as? String else { continue }
+                let parts = s.split(separator: ":", maxSplits: 3).map(String.init)
+                if parts.count >= 2, parts[0].allSatisfy(\.isNumber) {
+                    names[parts[0]] = parts.count >= 4 ? parts[3] : parts[1]
+                    n += 1
+                }
+            }
+        } else if let dict = obj as? [String: Any] {
+            let src = (dict["byCode"] as? [String: Any]) ?? dict
+            for (code, value) in src {
+                if let name = value as? String {
+                    names[code] = name
+                    n += 1
+                } else if let arr = value as? [Any], let name = arr.first as? String {
+                    names[code] = name
+                    n += 1
+                } else if let nested = value as? [String: Any], let name = nested["n"] as? String {
+                    names[code] = name
+                    n += 1
+                }
+            }
+        } else {
             throw EditorError.message("JSON inválido.")
         }
-        var n = 0
-        let src = (obj["byCode"] as? [String: Any]) ?? obj
-        for (code, value) in src {
-            if let name = value as? String {
-                names[code] = name
-                n += 1
-            } else if let arr = value as? [Any], let name = arr.first as? String {
-                names[code] = name
-                n += 1
-            }
-        }
         namedCount = names.count
-        ping("Mapa JSON · \(n) nomes")
+        ping("Mapa JSON · +\(n) · total \(names.count)")
         status = "Mapa: \(names.count) nomes"
     }
 
@@ -219,6 +277,43 @@ final class AppStore {
             try? await Task.sleep(nanoseconds: 3_200_000_000)
             if toast == msg { toast = nil }
         }
+    }
+}
+
+enum FlagTopic: String, CaseIterable, Identifiable {
+    case employee, dogfood, glass, bug, internal, mobileConfig, abprop, aura
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .employee: "Employee"
+        case .dogfood: "Dogfood"
+        case .glass: "Glass"
+        case .bug: "Bug"
+        case .internal: "Internal"
+        case .mobileConfig: "MC"
+        case .abprop: "ABProp"
+        case .aura: "Aura"
+        }
+    }
+    func matches(_ name: String, code: String) -> Bool {
+        let n = name.lowercased()
+        let f = n.replacingOccurrences(of: "_", with: "").replacingOccurrences(of: "-", with: "")
+        switch self {
+        case .employee: return f.contains("employee") || code == "1777"
+        case .dogfood: return f.contains("dogfood")
+        case .glass: return f.contains("liquidglass") || n.contains("liquid_glass")
+        case .bug: return f.contains("bugreport") || f.contains("rageshake") || n.contains("bug_report")
+        case .internal: return f.contains("internalsetting") || f.contains("internaltester") || f.contains("developer") || n.contains("internal_only")
+        case .mobileConfig: return f.contains("mobileconfig")
+        case .abprop: return f.contains("abprop")
+        case .aura: return n.contains("aura") || n.contains("subscrib") || n.contains("_subs")
+        }
+    }
+}
+
+enum Keyboard {
+    static func hide() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
 

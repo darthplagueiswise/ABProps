@@ -45,7 +45,10 @@ struct ContentView: View {
             .animation(.easeOut(duration: 0.22), value: store.toast)
             .navigationTitle("ABProps")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .preferredColorScheme(.dark)
+            .searchable(text: Bindable(store).query, placement: .toolbar, prompt: "nome ou código")
+            .searchToolbarBehavior(.minimize)
+            .onSubmit(of: .search) { Keyboard.hide() }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if store.screen != .home {
@@ -63,12 +66,16 @@ struct ContentView: View {
                             .buttonStyle(.glassProminent)
                     }
                 }
+                if store.screen == .flags || store.screen == .mobileConfig {
+                    ToolbarSpacer(.flexible, placement: .bottomBar)
+                    DefaultToolbarItem(kind: .search, placement: .bottomBar)
+                }
             }
         }
         .preferredColorScheme(.dark)
-        .fileImporter(isPresented: $pickingPlist, allowedContentTypes: [.item, .propertyList, .data]) { ingest($0, .plist) }
+        .fileImporter(isPresented: $pickingPlist, allowedContentTypes: [.item, .propertyList, .data, .json, .text], allowsMultipleSelection: true) { ingestMany($0) }
         .fileImporter(isPresented: $pickingBinary, allowedContentTypes: [.item, .data, .unixExecutable]) { ingest($0, .binary) }
-        .fileImporter(isPresented: $pickingJSON, allowedContentTypes: [.json, .item]) { ingest($0, .json) }
+        .fileImporter(isPresented: $pickingJSON, allowedContentTypes: [.json, .item], allowsMultipleSelection: true) { ingestMany($0) }
         .fileImporter(isPresented: $pickingMC, allowedContentTypes: [.item, .text, .json, .plainText], allowsMultipleSelection: true) { ingestMC($0) }
         .sheet(isPresented: $sharing) {
             if let exportURL { ShareSheet(url: exportURL) }
@@ -84,16 +91,34 @@ struct ContentView: View {
     func ingest(_ result: Result<URL, Error>, _ kind: Kind) {
         do {
             let url = try result.get()
-            let access = url.startAccessingSecurityScopedResource()
-            defer { if access { url.stopAccessingSecurityScopedResource() } }
-            let data = try Data(contentsOf: url)
+            try ingestURL(url, kind: kind)
+        } catch {
+            store.error = error.localizedDescription
+        }
+    }
+
+    func ingestMany(_ result: Result<[URL], Error>) {
+        do {
+            for url in try result.get() {
+                try ingestURL(url, kind: nil)
+            }
+        } catch {
+            store.error = error.localizedDescription
+        }
+    }
+
+    func ingestURL(_ url: URL, kind: Kind?) throws {
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        let data = try Data(contentsOf: url)
+        if let kind {
             switch kind {
             case .plist: try store.loadPlist(data, name: url.lastPathComponent)
             case .binary: store.loadFramework(data)
             case .json: try store.loadNameMap(data)
             }
-        } catch {
-            store.error = error.localizedDescription
+        } else {
+            try store.ingestAny(data, name: url.lastPathComponent)
         }
     }
 
@@ -200,7 +225,7 @@ struct HomeView: View {
                 Text("Plist e framework. Os dois.")
                     .font(.title.weight(.semibold))
                     .padding(.top, 8)
-                Text("O plist só tem IDs. Os nomes vêm dos getters WAABProperties no SharedModules. Esta IPA já traz 535 nomes iOS desta versão — sobe o framework só se mudar de build.")
+                Text("O plist só tem IDs. Os nomes vêm do Cobalt (WAWebABPropsConfigs, 1708) + getters iOS. Esta IPA já traz 2167 nomes — podes somar mais JSON em cima.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
@@ -238,8 +263,41 @@ struct HomeView: View {
                         .frame(maxWidth: .infinity)
                 }
 
+                Button("Plist + JSON (vários)", action: onPlist)
+                    .buttonStyle(.glass)
                 Button("Ou mapa JSON de nomes", action: onJSON)
                     .buttonStyle(.glass)
+
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Custom").font(.headline)
+                        Text("Ex. 1777 = is_meta_employee_or_internal_tester (Cobalt).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        HStack {
+                            TextField("código", text: Bindable(store).customCode)
+                                .keyboardType(.numberPad)
+                                .font(.subheadline.monospaced())
+                                .padding(8)
+                                .glassEffect(.regular, in: .rect(cornerRadius: 10))
+                            TextField("nome opcional", text: Bindable(store).customName)
+                                .textInputAutocapitalization(.never)
+                                .font(.subheadline)
+                                .padding(8)
+                                .glassEffect(.regular, in: .rect(cornerRadius: 10))
+                            TextField("valor", text: Bindable(store).customValue)
+                                .font(.subheadline.monospaced())
+                                .frame(width: 52)
+                                .padding(8)
+                                .glassEffect(.regular, in: .rect(cornerRadius: 10))
+                        }
+                        Button("Injectar custom") {
+                            store.addCustom()
+                            if store.catalog != nil { store.screen = .flags }
+                        }
+                        .buttonStyle(.glassProminent)
+                    }
+                }
 
                 GlassCard {
                     VStack(alignment: .leading, spacing: 10) {
@@ -283,6 +341,7 @@ struct FlagsView: View {
             if store.onlyInject && row.layer != "inject" { return false }
             if store.onlyNamed && named == nil { return false }
             if store.onlyUnnamed && named != nil { return false }
+            if let topic = store.topic, !topic.matches(named ?? "", code: row.code) { return false }
             if q.isEmpty { return true }
             return row.code.contains(q)
                 || (named?.lowercased().contains(q) ?? false)
@@ -338,15 +397,23 @@ struct FlagsView: View {
                     }
                 }
 
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass").font(.caption).foregroundStyle(.secondary)
-                    TextField("nome ou código", text: Bindable(store).query)
-                        .textInputAutocapitalization(.never)
-                        .font(.subheadline)
+                GlassEffectContainer {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(FlagTopic.allCases) { t in
+                                if store.topic == t {
+                                    Button(t.label) { store.topic = nil }
+                                        .buttonStyle(.glassProminent)
+                                } else {
+                                    Button(t.label) { store.topic = t }
+                                        .buttonStyle(.glass)
+                                }
+                            }
+                        }
+                    }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .glassEffect(.regular, in: .rect(cornerRadius: 14))
+
+                CustomInjectBar()
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
@@ -359,6 +426,7 @@ struct FlagsView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .scrollDismissesKeyboard(.immediately)
 
             HStack(alignment: .center, spacing: 10) {
                 Text("\(filtered.count) · \(store.namedInPlist) no plist · \(store.injectCount) fora · \(store.dirtyCount) editados")
@@ -440,7 +508,7 @@ struct FlagLine: View {
                 }
             ))
             .labelsHidden()
-            .tint(.cyan)
+            .tint(Color.cyan)
             .fixedSize()
         } else {
             TextField("valor", text: Binding(
@@ -459,6 +527,37 @@ struct FlagLine: View {
 
 func wrapIdent(_ s: String) -> String {
     s.replacingOccurrences(of: "_", with: "_\u{200B}")
+}
+
+struct CustomInjectBar: View {
+    @Environment(AppStore.self) private var store
+    var body: some View {
+        HStack(spacing: 8) {
+            TextField("1777", text: Bindable(store).customCode)
+                .keyboardType(.numberPad)
+                .font(.caption.monospaced())
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                .frame(width: 72)
+                .submitLabel(.done)
+                .onSubmit { Keyboard.hide(); store.addCustom() }
+            TextField("nome", text: Bindable(store).customName)
+                .textInputAutocapitalization(.never)
+                .font(.caption)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .glassEffect(.regular, in: .rect(cornerRadius: 12))
+            TextField("1", text: Bindable(store).customValue)
+                .font(.caption.monospaced())
+                .padding(.horizontal, 8)
+                .padding(.vertical, 8)
+                .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                .frame(width: 44)
+            Button("Add") { Keyboard.hide(); store.addCustom() }
+                .buttonStyle(.glassProminent)
+        }
+    }
 }
 
 struct MCView: View {
@@ -506,6 +605,7 @@ struct MCView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .scrollDismissesKeyboard(.immediately)
         }
         .safeAreaInset(edge: .bottom) {
             HStack {
