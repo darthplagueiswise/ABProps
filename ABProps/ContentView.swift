@@ -15,7 +15,9 @@ struct ContentView: View {
             ZStack(alignment: .bottom) {
                 BackgroundMesh()
                 VStack(spacing: 0) {
-                    DisasmBar()
+                    if store.screen == .home || store.busy {
+                        DisasmBar()
+                    }
                     Group {
                         switch store.screen {
                         case .home:
@@ -47,29 +49,18 @@ struct ContentView: View {
             .navigationTitle("ABProps")
             .navigationBarTitleDisplayMode(.inline)
             .preferredColorScheme(.dark)
-            .searchable(text: Bindable(store).query, placement: .toolbar, prompt: "nome ou código")
-            .searchToolbarBehavior(.minimize)
-            .onSubmit(of: .search) { Keyboard.hide() }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    if store.screen != .home {
-                        Button {
+                if store.screen != .home {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Voltar", systemImage: "chevron.left") {
                             store.screen = .home
-                        } label: {
-                            Image(systemName: "chevron.left")
                         }
-                        .buttonStyle(.glass)
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    if store.screen == .flags {
+                if store.screen == .flags {
+                    ToolbarItem(placement: .confirmationAction) {
                         Button("Salvar") { sharePlist() }
-                            .buttonStyle(.glassProminent)
                     }
-                }
-                if store.screen == .flags || store.screen == .mobileConfig {
-                    ToolbarSpacer(.flexible, placement: .bottomBar)
-                    DefaultToolbarItem(kind: .search, placement: .bottomBar)
                 }
             }
         }
@@ -350,121 +341,178 @@ struct HomeView: View {
 struct FlagsView: View {
     @Environment(AppStore.self) private var store
     var onShare: () -> Void
-    @State private var tab = 0
+    @Namespace private var glassNS
+    @State private var status: StatusFilter = .all
+    @State private var namesFilter: NamesFilter = .all
+    @State private var open: OpenMenu?
+
+    enum StatusFilter: String, CaseIterable, Identifiable {
+        case all, on, off
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .all: "Todas"
+            case .on: "Ativo"
+            case .off: "Inativo"
+            }
+        }
+    }
+    enum NamesFilter: String, CaseIterable, Identifiable {
+        case all, named, unnamed, inject
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .all: "Nomes"
+            case .named: "Com nome"
+            case .unnamed: "Sem nome"
+            case .inject: "Injetar"
+            }
+        }
+    }
+    enum OpenMenu { case status, names, topics }
 
     var filtered: [FlagRow] {
         let q = store.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return store.allFlags.filter { row in
+        let rows = store.allFlags.filter { row in
             let live = store.liveRoot?.flagValue(store: row.storeKey, code: row.code) ?? row.value
-            let on = live == "1" || live.lowercased() == "true"
-            if !store.onlyInject {
-                if tab == 0 && !on { return false }
-                if tab == 1 && on { return false }
-            }
+            let on = store.isActive(row)
+            if status == .on && !on { return false }
+            if status == .off && on { return false }
             let named = store.name(for: row.code)
-            if store.onlyInject && row.layer != "inject" { return false }
-            if store.onlyNamed && named == nil { return false }
-            if store.onlyUnnamed && named != nil { return false }
+            switch namesFilter {
+            case .all: break
+            case .named: if named == nil { return false }
+            case .unnamed: if named != nil { return false }
+            case .inject: if row.layer != "inject" { return false }
+            }
             if let topic = store.topic, !topic.matches(named ?? "", code: row.code) { return false }
             if q.isEmpty { return true }
             return row.code.contains(q)
                 || (named?.lowercased().contains(q) ?? false)
                 || live.lowercased().contains(q)
         }
+        return rows.sorted { a, b in
+            let an = store.name(for: a.code) != nil
+            let bn = store.name(for: b.code) != nil
+            if an != bn { return an && !bn }
+            return (Int(a.code) ?? 0) < (Int(b.code) ?? 0)
+        }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 8) {
-                Picker("", selection: $tab) {
-                    Text("Ativo").tag(0)
-                    Text("Inativo").tag(1)
-                }
-                .pickerStyle(.segmented)
-
-                GlassEffectContainer {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            if store.onlyNamed {
-                                Button("Com nome") { store.onlyNamed = false }
-                                    .buttonStyle(.glassProminent)
-                            } else {
-                                Button("Com nome") {
-                                    store.onlyNamed = true
-                                    store.onlyUnnamed = false
-                                }
-                                .buttonStyle(.glass)
-                            }
-                            if store.onlyUnnamed {
-                                Button("Sem nome") { store.onlyUnnamed = false }
-                                    .buttonStyle(.glassProminent)
-                            } else {
-                                Button("Sem nome") {
-                                    store.onlyUnnamed = true
-                                    store.onlyNamed = false
-                                    store.onlyInject = false
-                                }
-                                .buttonStyle(.glass)
-                            }
-                            if store.onlyInject {
-                                Button("Injetar \(store.injectCount)") { store.onlyInject = false }
-                                    .buttonStyle(.glassProminent)
-                            } else {
-                                Button("Injetar \(store.injectCount)") {
-                                    store.onlyInject = true
-                                    store.onlyUnnamed = false
-                                    store.onlyNamed = true
-                                }
-                                .buttonStyle(.glass)
-                            }
-                        }
+            VStack(alignment: .leading, spacing: 8) {
+                GlassEffectContainer(spacing: 8) {
+                    HStack(alignment: .center, spacing: 8) {
+                        if open == nil || open == .status { statusCluster }
+                        if open == nil || open == .names { namesCluster }
+                        if open == nil || open == .topics { topicsCluster }
                     }
                 }
-
-                GlassEffectContainer {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(FlagTopic.allCases) { t in
-                                if store.topic == t {
-                                    Button(t.label) { store.topic = nil }
-                                        .buttonStyle(.glassProminent)
-                                } else {
-                                    Button(t.label) { store.topic = t }
-                                        .buttonStyle(.glass)
-                                }
-                            }
-                        }
-                    }
+                .animation(.smooth(duration: 0.28), value: open == nil)
+                if open == nil {
+                    CustomInjectBar()
                 }
-
-                CustomInjectBar()
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+            .padding(.bottom, 4)
 
             List(filtered) { row in
                 FlagLine(row: row)
                     .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 14))
+                    .listRowInsets(EdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 14))
                     .listRowSeparator(.visible)
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .scrollDismissesKeyboard(.immediately)
-
-            HStack(alignment: .center, spacing: 10) {
-                Text("\(filtered.count) · \(store.namedInPlist) no plist · \(store.injectCount) fora · \(store.dirtyCount) editados")
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-                Spacer(minLength: 8)
+            .contentMargins(.bottom, 12, for: .scrollContent)
+        }
+        .searchable(text: Bindable(store).query, placement: .automatic, prompt: "nome ou código")
+        .searchToolbarBehavior(.minimize)
+        .onSubmit(of: .search) { Keyboard.hide() }
+        .toolbar {
+            DefaultToolbarItem(kind: .search, placement: .bottomBar)
+            ToolbarSpacer(.flexible, placement: .bottomBar)
+            ToolbarItem(placement: .bottomBar) {
                 Button("Exportar", action: onShare)
-                    .buttonStyle(.glassProminent)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .glassEffect(.regular, in: .rect(cornerRadius: 0))
+        }
+    }
+
+    @ViewBuilder
+    func chip(_ title: String, on: Bool, id: String, action: @escaping () -> Void) -> some View {
+        if on {
+            Button(title, action: action)
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.glassProminent)
+                .glassEffectID(id, in: glassNS)
+        } else {
+            Button(title, action: action)
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.glass)
+                .glassEffectID(id, in: glassNS)
+        }
+    }
+
+    @ViewBuilder
+    var statusCluster: some View {
+        if open == .status {
+            HStack(spacing: 6) {
+                ForEach(StatusFilter.allCases) { s in
+                    chip(s.label, on: s == status, id: "st-\(s.rawValue)") {
+                        status = s
+                        open = nil
+                    }
+                }
+            }
+        } else {
+            chip(status.label, on: status != .all, id: "st-\(status.rawValue)") {
+                open = .status
+            }
+        }
+    }
+
+    @ViewBuilder
+    var namesCluster: some View {
+        if open == .names {
+            HStack(spacing: 6) {
+                ForEach(NamesFilter.allCases) { n in
+                    chip(n == .inject ? "Injetar \(store.injectCount)" : n.label, on: n == namesFilter, id: "nm-\(n.rawValue)") {
+                        namesFilter = n
+                        open = nil
+                    }
+                }
+            }
+        } else {
+            chip(namesFilter == .inject ? "Injetar \(store.injectCount)" : namesFilter.label, on: namesFilter != .all, id: "nm-\(namesFilter.rawValue)") {
+                open = .names
+            }
+        }
+    }
+
+    @ViewBuilder
+    var topicsCluster: some View {
+        if open == .topics {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    chip("Todos", on: store.topic == nil, id: "tp-all") {
+                        store.topic = nil
+                        open = nil
+                    }
+                    ForEach(FlagTopic.allCases) { t in
+                        chip(t.label, on: store.topic == t, id: "tp-\(t.rawValue)") {
+                            store.topic = store.topic == t ? nil : t
+                            open = nil
+                        }
+                    }
+                }
+            }
+        } else {
+            chip(store.topic?.label ?? "Tópicos", on: store.topic != nil, id: "tp-\(store.topic?.rawValue ?? "all")") {
+                open = .topics
+            }
         }
     }
 }

@@ -362,6 +362,19 @@ final class AppStore {
         return .bool
     }
 
+    func isActive(_ row: FlagRow) -> Bool {
+        let live = liveRoot?.flagValue(store: row.storeKey, code: row.code) ?? row.value
+        switch kind(for: row.code) {
+        case .bool:
+            return live == "1" || live.lowercased() == "true"
+        case .int, .float, .double:
+            if let n = Double(live) { return n != 0 }
+            return !live.isEmpty && live != "0"
+        case .string:
+            return !live.isEmpty
+        }
+    }
+
     func ping(_ msg: String) {
         toast = msg
         Task { @MainActor in
