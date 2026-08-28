@@ -35,7 +35,6 @@ struct ContentView: View {
                 }
             }
         }
-        .tint(.cyan)
         .preferredColorScheme(.dark)
         .fileImporter(isPresented: $pickingPlist, allowedContentTypes: [.item, .propertyList, .data, .json, .text], allowsMultipleSelection: true) { ingestMany($0) }
         .fileImporter(isPresented: $pickingBinary, allowedContentTypes: [.item, .data, .unixExecutable]) { ingest($0, .binary) }
@@ -113,6 +112,55 @@ enum FileShare {
     }
 }
 
+struct DarkCanvas: View {
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.07, green: 0.075, blue: 0.09),
+                Color(red: 0.03, green: 0.03, blue: 0.035),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+        .overlay {
+            Circle()
+                .fill(Color.white.opacity(0.04))
+                .frame(width: 280, height: 280)
+                .blur(radius: 80)
+                .offset(x: -90, y: -180)
+        }
+    }
+}
+
+struct HomeRow: View {
+    let title: String
+    let subtitle: String
+    let button: String
+    var busy = false
+    let action: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            Button(button, action: action)
+                .buttonStyle(.glassProminent)
+                .disabled(busy)
+        }
+        .padding(18)
+        .glassEffect(.regular, in: .rect(cornerRadius: 26))
+    }
+}
+
 struct HomeView: View {
     @Environment(AppStore.self) private var store
     var onPlist: () -> Void
@@ -122,72 +170,59 @@ struct HomeView: View {
     var onShareNames: () -> Void
 
     var body: some View {
-        List {
-            Section {
-                Button(action: onPlist) {
-                    LabeledContent {
-                        Text(store.catalog == nil ? "Nenhum" : store.plistName)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    } label: {
-                        Label("Plist", systemImage: "doc")
+        ScrollView {
+            VStack(spacing: 14) {
+                GlassEffectContainer(spacing: 14) {
+                    VStack(spacing: 14) {
+                        HomeRow(
+                            title: "Plist",
+                            subtitle: store.catalog == nil ? "group.net.whatsapp.WhatsApp.shared.plist" : store.plistName,
+                            button: "Abrir",
+                            action: onPlist
+                        )
+                        HomeRow(
+                            title: "SharedModules",
+                            subtitle: store.disassembling ? store.status : (store.stubCount == 0 ? "Framework Mach-O" : "\(store.namedCount) nomes · \(store.stubCount) getters"),
+                            button: store.disassembling ? "…" : "Enviar",
+                            busy: store.disassembling,
+                            action: onBinary
+                        )
+                        HomeRow(
+                            title: "Fetch ABProps",
+                            subtitle: store.fetching ? store.status : (store.fetched ? "\(store.namedCount) nomes" : "WhatsApp Web"),
+                            button: store.fetching ? "…" : "Buscar",
+                            busy: store.fetching,
+                            action: { store.fetchWebABProps() }
+                        )
                     }
                 }
-                Button(action: onBinary) {
-                    LabeledContent {
-                        Text(store.disassembling ? store.status : (store.stubCount == 0 ? "Nenhum" : "\(store.stubCount) getters"))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    } label: {
-                        Label("SharedModules", systemImage: "gearshape.2")
-                    }
-                }
-                .disabled(store.disassembling)
-                Button { store.fetchWebABProps() } label: {
-                    LabeledContent {
-                        Text(store.fetching ? store.status : (store.fetched ? "\(store.namedCount) nomes" : "WhatsApp Web"))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    } label: {
-                        Label("Fetch ABProps", systemImage: "arrow.down.circle")
-                    }
-                }
-                .disabled(store.fetching)
-            } footer: {
+
                 if store.busy {
-                    ProgressView(value: store.disasmPct, total: 100) {
-                        Text(store.status).font(.caption)
-                    }
-                } else {
-                    Text("\(store.namedCount) nomes no mapa")
+                    ProgressView(value: store.disasmPct, total: 100)
+                        .padding(.horizontal, 8)
                 }
-            }
 
-            Section {
-                Button { store.openPatcher() } label: {
-                    Label("Patcher", systemImage: "slider.horizontal.3")
-                }
-                Button(action: onShareNames) {
-                    Label("Baixar JSON", systemImage: "square.and.arrow.up")
-                }
-                .disabled(store.names.isEmpty)
-                Button(action: onJSON) {
-                    Label("Mapa de nomes", systemImage: "text.badge.plus")
-                }
-            }
+                Button("Patcher") { store.openPatcher() }
+                    .buttonStyle(.glassProminent)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
 
-            Section {
-                Button(action: onMC) {
-                    Label("MobileConfig", systemImage: "list.bullet.rectangle")
-                }
-                if !store.mcConfigs.isEmpty {
-                    Button { store.path.append(.mobileConfig) } label: {
-                        Label("\(store.mcConfigs.count) configs", systemImage: "arrow.right")
+                HStack(spacing: 10) {
+                    Button("JSON", action: onShareNames)
+                        .buttonStyle(.glass)
+                        .disabled(store.names.isEmpty)
+                    Button("Nomes", action: onJSON)
+                        .buttonStyle(.glass)
+                    Button(store.mcConfigs.isEmpty ? "MC" : "MC \(store.mcConfigs.count)") {
+                        if store.mcConfigs.isEmpty { onMC() } else { store.path.append(.mobileConfig) }
                     }
+                        .buttonStyle(.glass)
                 }
             }
+            .padding(20)
+            .padding(.bottom, 24)
         }
-        .listStyle(.insetGrouped)
+        .background { DarkCanvas() }
     }
 }
 
@@ -252,25 +287,41 @@ struct FlagsView: View {
     var body: some View {
         List {
             Section {
-                HStack {
+                HStack(spacing: 8) {
                     TextField("1777", text: Bindable(store).customCode)
                         .keyboardType(.numberPad)
                         .font(.body.monospaced())
-                        .frame(width: 72)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                        .frame(width: 88)
                     TextField("nome", text: Bindable(store).customName)
                         .textInputAutocapitalization(.never)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .glassEffect(.regular.interactive(), in: .capsule)
                     TextField("1", text: Bindable(store).customValue)
                         .font(.body.monospaced())
-                        .frame(width: 44)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                        .frame(width: 52)
                     Button("Add") { Keyboard.hide(); store.addCustom() }
+                        .buttonStyle(.glassProminent)
                 }
             }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
 
             ForEach(filtered) { row in
                 FlagLine(row: row)
+                    .listRowBackground(Color.clear)
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background { DarkCanvas() }
         .searchable(text: Bindable(store).query, placement: .navigationBarDrawer(displayMode: .always), prompt: "nome ou código")
         .onSubmit(of: .search) { Keyboard.hide() }
         .navigationTitle("Patcher")
@@ -329,7 +380,7 @@ struct FlagLine: View {
                 if row.layer == "inject" {
                     Text("fora")
                         .font(.caption2)
-                        .foregroundStyle(.cyan)
+                        .foregroundStyle(.blue)
                 }
                 if live != orig {
                     Text("edit")
@@ -357,7 +408,7 @@ struct FlagLine: View {
                 }
             ))
             .labelsHidden()
-            .tint(.cyan)
+            .tint(.blue)
         case .int, .float, .double, .string:
             TextField(store.kind(for: row.code) == .string ? "texto" : "0", text: Binding(
                 get: { live },
@@ -442,7 +493,7 @@ struct MCParamLine: View {
                         set: { store.mcValues[param.id] = $0 ? "true" : "false" }
                     ))
                     .labelsHidden()
-                    .tint(.cyan)
+                    .tint(.blue)
                 } else {
                     TextField("", text: Binding(
                         get: { value },
