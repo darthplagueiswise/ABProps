@@ -116,26 +116,29 @@ struct HomeCell: View {
     let icon: String
     let title: String
     let value: String
+    var tint: Color = .blue
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             Image(systemName: icon)
-                .font(.body.weight(.medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 28)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(tint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.body)
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                 Text(value)
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
             Spacer(minLength: 8)
             Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(.tertiary)
         }
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
     }
 }
@@ -153,26 +156,29 @@ struct HomeView: View {
             Section {
                 Button(action: onPlist) {
                     HomeCell(
-                        icon: "doc",
+                        icon: "doc.fill",
                         title: "Plist",
-                        value: store.catalog == nil ? "Toque para abrir" : store.plistName
+                        value: store.catalog == nil ? "Toque para abrir" : store.plistName,
+                        tint: .blue
                     )
                 }
                 .buttonStyle(.plain)
                 Button(action: onBinary) {
                     HomeCell(
-                        icon: "gearshape.2",
+                        icon: "gearshape.2.fill",
                         title: "SharedModules",
-                        value: store.disassembling ? store.status : (store.stubCount == 0 ? "Toque para enviar o framework" : "\(store.stubCount) getters")
+                        value: store.disassembling ? store.status : (store.stubCount == 0 ? "Toque para enviar o framework" : "\(store.stubCount) getters"),
+                        tint: .gray
                     )
                 }
                 .buttonStyle(.plain)
                 .disabled(store.disassembling)
                 Button { store.fetchWebABProps() } label: {
                     HomeCell(
-                        icon: "arrow.down.circle",
+                        icon: "arrow.down.circle.fill",
                         title: "Fetch ABProps",
-                        value: store.fetching ? store.status : (store.fetched ? "\(store.namedCount) nomes — toque de novo" : "Toque para buscar no WhatsApp Web")
+                        value: store.fetching ? store.status : (store.fetched ? "\(store.namedCount) nomes — toque de novo" : "Toque para buscar no WhatsApp Web"),
+                        tint: .green
                     )
                 }
                 .buttonStyle(.plain)
@@ -192,12 +198,13 @@ struct HomeView: View {
                     HomeCell(
                         icon: "slider.horizontal.3",
                         title: "Abrir Patcher",
-                        value: "\(store.namedCount) flags no mapa"
+                        value: "\(store.namedCount) flags no mapa",
+                        tint: .orange
                     )
                 }
                 .buttonStyle(.plain)
                 Button(action: onShareNames) {
-                    HomeCell(icon: "square.and.arrow.up", title: "Baixar JSON", value: store.names.isEmpty ? "Nada ainda" : "\(store.namedCount) nomes")
+                    HomeCell(icon: "square.and.arrow.up.fill", title: "Baixar JSON", value: store.names.isEmpty ? "Nada ainda" : "\(store.namedCount) nomes", tint: .teal)
                 }
                 .buttonStyle(.plain)
                 .disabled(store.names.isEmpty)
@@ -207,7 +214,7 @@ struct HomeView: View {
 
             Section {
                 Button(action: onMC) {
-                    HomeCell(icon: "folder", title: "Enviar arquivos", value: "params_map e names")
+                    HomeCell(icon: "folder.fill", title: "Enviar arquivos", value: "params_map e names", tint: .purple)
                 }
                 .buttonStyle(.plain)
                 if !store.mcConfigs.isEmpty {
@@ -221,6 +228,8 @@ struct HomeView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .listSectionSpacing(12)
+        .environment(\.defaultMinListRowHeight, 48)
     }
 }
 
@@ -311,10 +320,15 @@ struct FlagsView: View {
         }
         .listStyle(.insetGrouped)
         .searchable(text: Bindable(store).query, placement: .navigationBarDrawer(displayMode: .always), prompt: "nome ou código")
+        .scrollDismissesKeyboard(.immediately)
         .onSubmit(of: .search) { Keyboard.hide() }
         .navigationTitle("Patcher")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("OK") { Keyboard.hide() }
+            }
             ToolbarItemGroup(placement: .primaryAction) {
                 Menu {
                     Picker("Status", selection: $status) {
@@ -352,7 +366,7 @@ struct FlagLine: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(wrapIdent(named ?? "sem nome"))
-                .font(.body.weight(named == nil ? .regular : .medium))
+                .font(.system(size: 13, weight: named == nil ? .regular : .semibold))
                 .foregroundStyle(named == nil ? .secondary : .primary)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
@@ -403,9 +417,12 @@ struct FlagLine: View {
                 set: { store.setFlag(storeKey: row.storeKey, code: row.code, value: $0) }
             ))
             .keyboardType(store.kind(for: row.code) == .string ? .default : (store.kind(for: row.code) == .int ? .numberPad : .decimalPad))
-            .font(.body.monospaced())
+            .font(.caption.monospaced())
             .multilineTextAlignment(.trailing)
-            .frame(minWidth: 56, maxWidth: store.kind(for: row.code) == .string ? 140 : 88)
+            .frame(minWidth: 52, maxWidth: store.kind(for: row.code) == .string ? 120 : 72)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .submitLabel(.done)
             .onSubmit { Keyboard.hide() }
         }
