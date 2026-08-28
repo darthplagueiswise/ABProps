@@ -60,8 +60,15 @@ indirect enum PlistValue {
     }
 
     func settingFlag(store: String, code: String, value: String) -> PlistValue {
-        guard case .nested(let map) = get(store), case .dict = map else { return self }
-        guard var entry = map.get(code), case .dict = entry else { return self }
+        var map: PlistValue
+        if case .nested(let inner) = get(store), case .dict = inner {
+            map = inner
+        } else if case .dict = get(store) {
+            map = get(store)!
+        } else {
+            map = .dict([])
+        }
+        var entry = map.get(code) ?? .dict([("value", .str(value))])
         entry = entry.set("value", .str(value))
         return set(store, .nested(map.set(code, entry)))
     }

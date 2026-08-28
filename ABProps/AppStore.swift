@@ -16,8 +16,10 @@ final class AppStore {
     var query = ""
     var onlyNamed = false
     var onlyUnnamed = false
+    var onlyInject = false
     var names: [String: String] = [:]
     var status = "À espera de ficheiros"
+    var disasmStatus = "Capstone ARM64 · parado"
     var disasmPct: Double = 0
     var busy = false
     var error: String?
@@ -45,7 +47,32 @@ final class AppStore {
         for b in order {
             for r in b.flags { best[r.code] = r }
         }
+        let storeKey = personalStore
+        for (code, _) in names where best[code] == nil {
+            best[code] = FlagRow(
+                storeKey: storeKey,
+                code: code,
+                value: "0",
+                overlay: false,
+                layer: "inject"
+            )
+        }
         return best.values.sorted { (Int($0.code) ?? 0) < (Int($1.code) ?? 0) }
+    }
+
+    var personalStore: String {
+        catalog?.buckets.first(where: { $0.storeKey.hasPrefix("abp.") && $0.storeKey.hasSuffix("p") })?.storeKey
+            ?? "abp.pnonep"
+    }
+
+    var namedInPlist: Int {
+        guard catalog != nil else { return 0 }
+        let codes = Set(catalog!.buckets.filter { $0.kind == .flags }.flatMap { $0.flags.map(\.code) })
+        return names.keys.filter { codes.contains($0) }.count
+    }
+
+    var injectCount: Int {
+        max(0, names.count - namedInPlist)
     }
 
     func loadPlist(_ data: Data, name: String) throws {
@@ -61,13 +88,14 @@ final class AppStore {
         liveRoot = next.root
         plistName = name
         error = nil
-        ping("Plist: \(next.flagCount) flags")
+        ping("Plist: \(next.flagCount) flags · \(namedInPlist) com nome · \(injectCount) só no framework")
         status = "\(name) · \(next.flagCount) flags · \(namedCount) nomes"
     }
 
     func loadFramework(_ data: Data) {
         busy = true
         disasmPct = 2
+        disasmStatus = "Capstone: a desmontar ARM64…"
         status = "Capstone: a desmontar ARM64…"
         ping("Capstone iniciado · \(data.count / 1_000_000) MB")
         error = nil
@@ -85,7 +113,10 @@ final class AppStore {
                     self.stubCount = result.stubCodes
                     self.disasmPct = 100
                     self.busy = false
-                    let msg = "Disassemble OK · \(result.named) nomes · \(result.stubCodes) getters"
+                    let hit = self.namedInPlist
+                    let inj = self.injectCount
+                    let msg = "Disassemble OK · \(result.named) nomes · \(hit) no plist · \(inj) injectáveis"
+                    self.disasmStatus = msg
                     self.status = msg
                     self.ping(msg)
                 }

@@ -49,8 +49,12 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if store.screen != .home {
-                        Button("Início") { store.screen = .home }
-                            .buttonStyle(.glass)
+                        Button {
+                            store.screen = .home
+                        } label: {
+                            Image(systemName: "chevron.left")
+                        }
+                        .buttonStyle(.glass)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -270,9 +274,12 @@ struct FlagsView: View {
         return store.allFlags.filter { row in
             let live = store.liveRoot?.flagValue(store: row.storeKey, code: row.code) ?? row.value
             let on = live == "1" || live.lowercased() == "true"
-            if tab == 0 && !on { return false }
-            if tab == 1 && on { return false }
+            if !store.onlyInject {
+                if tab == 0 && !on { return false }
+                if tab == 1 && on { return false }
+            }
             let named = store.name(for: row.code)
+            if store.onlyInject && row.layer != "inject" { return false }
             if store.onlyNamed && named == nil { return false }
             if store.onlyUnnamed && named != nil { return false }
             if q.isEmpty { return true }
@@ -292,30 +299,40 @@ struct FlagsView: View {
                 .pickerStyle(.segmented)
 
                 GlassEffectContainer {
-                    HStack(spacing: 8) {
-                        if store.onlyNamed {
-                            Button("Com nome") {
-                                store.onlyNamed = false
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            if store.onlyNamed {
+                                Button("Com nome") { store.onlyNamed = false }
+                                    .buttonStyle(.glassProminent)
+                            } else {
+                                Button("Com nome") {
+                                    store.onlyNamed = true
+                                    store.onlyUnnamed = false
+                                }
+                                .buttonStyle(.glass)
                             }
-                            .buttonStyle(.glassProminent)
-                        } else {
-                            Button("Com nome") {
-                                store.onlyNamed = true
-                                store.onlyUnnamed = false
+                            if store.onlyUnnamed {
+                                Button("Sem nome") { store.onlyUnnamed = false }
+                                    .buttonStyle(.glassProminent)
+                            } else {
+                                Button("Sem nome") {
+                                    store.onlyUnnamed = true
+                                    store.onlyNamed = false
+                                    store.onlyInject = false
+                                }
+                                .buttonStyle(.glass)
                             }
-                            .buttonStyle(.glass)
-                        }
-                        if store.onlyUnnamed {
-                            Button("Sem nome") {
-                                store.onlyUnnamed = false
+                            if store.onlyInject {
+                                Button("Injectar \(store.injectCount)") { store.onlyInject = false }
+                                    .buttonStyle(.glassProminent)
+                            } else {
+                                Button("Injectar \(store.injectCount)") {
+                                    store.onlyInject = true
+                                    store.onlyUnnamed = false
+                                    store.onlyNamed = true
+                                }
+                                .buttonStyle(.glass)
                             }
-                            .buttonStyle(.glassProminent)
-                        } else {
-                            Button("Sem nome") {
-                                store.onlyUnnamed = true
-                                store.onlyNamed = false
-                            }
-                            .buttonStyle(.glass)
                         }
                     }
                 }
@@ -343,7 +360,7 @@ struct FlagsView: View {
         }
         .safeAreaInset(edge: .bottom) {
             HStack {
-                Text("\(filtered.count) · \(store.namedCount) nomes · \(store.dirtyCount) editados")
+                Text("\(filtered.count) · \(store.namedInPlist) no plist · \(store.injectCount) injectáveis · \(store.dirtyCount) editados")
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -383,6 +400,14 @@ struct FlagLine: View {
                     if row.overlay {
                         Text("ovr")
                             .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .glassEffect(.regular, in: .capsule)
+                    }
+                    if row.layer == "inject" {
+                        Text("injectar")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.cyan)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .glassEffect(.regular, in: .capsule)
