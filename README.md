@@ -13,3 +13,7 @@ Workflow **Build IPA (iOS SDK 26)** em `macos-26`.
 1. Actions → Run workflow (ou push em `main`).
 2. Artifact `ABProps.ipa` — **sem assinatura**.
 3. Assina com o teu certificado de developer, ou instala com TrollStore.
+
+```
+codesign -f -s "Apple Development: O_TEU_NOME" --entitlements entitlements.plist Payload/ABProps.app
+```
