@@ -60,6 +60,21 @@ struct ReadablePlistSmoke {
         precondition((editedRoot["archivedObjects"] as! Data) == archive,
                      "Untouched NSKeyedArchiver binary remains exact")
 
+        let archiveXML = output.xml.replacingOccurrences(
+            of: "<string>sample</string>", with: "<string>changed through XML</string>"
+        )
+        precondition(archiveXML != output.xml, "archived object was expanded visibly")
+        let archiveEdited = try ReadablePlistEngine.reconstruct(
+            archiveXML, originalFormat: output.encoding, originalBytes: raw
+        )
+        let editedArchiveDictionary = try PropertyListSerialization.propertyList(
+            from: archiveEdited, options: [], format: nil
+        ) as! [String: Any]
+        let archiveBlob = editedArchiveDictionary["archivedObjects"] as! Data
+        let unpacked = try NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(archiveBlob) as! NSDictionary
+        precondition(unpacked["account"] as? String == "changed through XML",
+                     "NSKeyedArchiver UID graph survives editing archived strings")
+
         let b64Outer = Data(raw.base64EncodedString().utf8)
         let viaBase64 = try ReadablePlistEngine.open(b64Outer)
         guard case .base64 = viaBase64.encoding else { fatalError("Outer Base64 lost") }
