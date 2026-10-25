@@ -8,12 +8,14 @@ struct ContentView: View {
     @State private var pickingBinary = false
     @State private var pickingJSON = false
     @State private var pickingMC = false
+    @State private var showingUniversal = false
 
     var body: some View {
         @Bindable var store = store
         NavigationStack(path: $store.path) {
             HomeView(
                 onPlist: { pickingPlist = true },
+                onUniversal: { showingUniversal = true },
                 onBinary: { pickingBinary = true },
                 onJSON: { pickingJSON = true },
                 onMC: { pickingMC = true },
@@ -37,7 +39,9 @@ struct ContentView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .sheet(isPresented: $showingUniversal) {
+            UniversalPlistEditorView()
+        }
         .fileImporter(isPresented: $pickingPlist, allowedContentTypes: [.item, .propertyList, .data, .json, .text], allowsMultipleSelection: true) { ingestMany($0) }
         .fileImporter(isPresented: $pickingBinary, allowedContentTypes: [.item, .data, .unixExecutable]) { ingest($0, .binary) }
         .fileImporter(isPresented: $pickingJSON, allowedContentTypes: [.json, .item], allowsMultipleSelection: true) { ingestMany($0) }
@@ -148,6 +152,7 @@ struct HomeCell: View {
 struct HomeView: View {
     @Environment(AppStore.self) private var store
     var onPlist: () -> Void
+    var onUniversal: () -> Void
     var onBinary: () -> Void
     var onJSON: () -> Void
     var onMC: () -> Void
@@ -158,6 +163,15 @@ struct HomeView: View {
     var body: some View {
         List {
             Section {
+                Button(action: onUniversal) {
+                    HomeCell(
+                        icon: "curlybraces.square.fill",
+                        title: "Editor Plist Universal",
+                        value: "XML, binário, Base64, JSON, busca e exportação",
+                        tint: .cyan
+                    )
+                }
+                .buttonStyle(.plain)
                 Button(action: onPlist) {
                     HomeCell(
                         icon: "doc.fill",
