@@ -47,7 +47,7 @@ final class AppStore {
     var lastFetchedJSON: Data?
     var fetched = false
 
-    init() { loadBundledNames() }
+    init() {}
 
     var dirtyCount: Int {
         guard let catalog, let liveRoot else { return 0 }
