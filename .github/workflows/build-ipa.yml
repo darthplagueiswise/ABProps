@@ -38,6 +38,12 @@ jobs:
           swiftc -swift-version 5 ABProps/UniversalPlistCodec.swift ABProps/ReadablePlistEngine.swift tests/ReadablePlistSmoke.swift -o /tmp/readable-plist-smoke
           /tmp/readable-plist-smoke
 
+      - name: Validate semantic XML archive and Base64 roundtrip
+        run: |
+          set -euo pipefail
+          swiftc -swift-version 5 ABProps/UniversalPlistCodec.swift ABProps/SemanticPlistEngine.swift tests/SemanticPlistSmoke.swift -o /tmp/semantic-plist-smoke
+          /tmp/semantic-plist-smoke
+
       - name: Build Capstone ARM64 static lib (iphoneos SDK 27)
         run: |
           set -e
