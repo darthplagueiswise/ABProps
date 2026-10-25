@@ -72,6 +72,8 @@
 				A11006 /* MachOExtractor.swift */,
 				A1100C /* MobileConfig.swift */,
 				A1100E /* WebABProps.swift */,
+				A1100F /* UniversalPlistCodec.swift */,
+				A11010 /* UniversalPlistEditor.swift */,
 				A1100D /* ios-abprops-names.json */,
 				A11008 /* CSUtil.c */,
 				A11009 /* CSUtil.h */,
@@ -169,6 +171,8 @@
 				A10006 /* MachOExtractor.swift in Sources */,
 				A10009 /* MobileConfig.swift in Sources */,
 				A1000B /* WebABProps.swift in Sources */,
+				A1000C /* UniversalPlistCodec.swift in Sources */,
+				A1000D /* UniversalPlistEditor.swift in Sources */,
 				A10007 /* CSUtil.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
