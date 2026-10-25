@@ -36,7 +36,7 @@ struct ReadablePlistSmoke {
         precondition(output.xml.contains("$archiver"), "NSKeyedArchiver structural representation becomes readable")
 
         // Unedited original: byte-for-byte integrity.
-        let untouched = try ReadablePlistEngine.reconstruct(output.xml, originalFormat: output.encoding)
+        let untouched = try ReadablePlistEngine.reconstruct(output.xml, originalFormat: output.encoding, originalBytes: raw)
         let old = try PropertyListSerialization.propertyList(from: raw, options: [], format: nil) as! [String: Any]
         let again = try PropertyListSerialization.propertyList(from: untouched, options: [], format: nil) as! [String: Any]
         precondition((old["embeddedBinary"] as! Data) == (again["embeddedBinary"] as! Data))
@@ -44,7 +44,7 @@ struct ReadablePlistSmoke {
 
         // Edit actual decoded element in XML, then recode into embedded Base64 and the outer original bplist.
         let changedXML = output.xml.replacingOccurrences(of: "hello base64 JSON", with: "edited Base64 JSON")
-        let edited = try ReadablePlistEngine.reconstruct(changedXML, originalFormat: output.encoding)
+        let edited = try ReadablePlistEngine.reconstruct(changedXML, originalFormat: output.encoding, originalBytes: raw)
         let editedRoot = try PropertyListSerialization.propertyList(from: edited, options: [], format: nil) as! [String: Any]
         let reBase64 = editedRoot["encodedJSON"] as! String
         let decoded = Data(base64Encoded: reBase64)!
@@ -61,7 +61,7 @@ struct ReadablePlistSmoke {
         guard case .base64 = viaBase64.encoding else { fatalError("Outer Base64 lost") }
         let b64Edited = try ReadablePlistEngine.reconstruct(
             viaBase64.xml.replacingOccurrences(of: "hello base64 JSON", with: "Base64 twice edited"),
-            originalFormat: viaBase64.encoding
+            originalFormat: viaBase64.encoding, originalBytes: b64Outer
         )
         precondition(String(decoding: b64Edited, as: UTF8.self).hasPrefix("YnBsaXN0"),
                      "Bplist wrapped as Base64 remains wrapped")
