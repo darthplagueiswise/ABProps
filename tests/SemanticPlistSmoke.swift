@@ -3,9 +3,11 @@ import Foundation
 @main
 struct SemanticPlistSmoke {
     static func main() throws {
+        let key32 = Data([0xbc, 0xc4, 0xfe, 0xda, 0xa8, 0xa9, 0x8b, 0xca, 0x72, 0x27, 0x14, 0x71, 0x9b, 0xca, 0x22, 0x54, 0x81, 0x96, 0x36, 0x20, 0xe8, 0x3b, 0x83, 0xd3, 0xc9, 0xb7, 0xec, 0xb9, 0x3f, 0xb2, 0x62, 0x1f])
         let archive: NSDictionary = [
             "account": "Example User",
-            "nested": NSArray(array: ["one", "two"])
+            "nested": NSArray(array: ["one", "two"]),
+            "publicKey": key32
         ]
         let archived = try NSKeyedArchiver.archivedData(
             withRootObject: archive, requiringSecureCoding: false
@@ -48,6 +50,11 @@ struct SemanticPlistSmoke {
         }
         guard linked["account"] as? String == "Example User" else { let graph = try! UniversalPlistCodec.decode(archived.base64EncodedString().data(using: .utf8)!).object as! [String:Any]
             fatalError("Archive unresolved: \(linked). TOP=\(String(describing: graph["$top"])) OBJECTS=\(String(describing: (graph["$objects"] as? [Any])?.prefix(8)))") }
+        guard let linkedKey = linked["publicKey"] as? String else {
+            fatalError("Archived NSData must appear as a readable hex value")
+        }
+        precondition(linkedKey == "hex:" + key32.map { String(format: "%02x", $0) }.joined(),
+                     "Entire 32-byte public key must be visible as hex")
         let data = root["json_data"] as! [String: Any]
         precondition((data["missing"] as? [String: Bool])?["__json_null__"] == true)
         precondition(root["kCompositeEventsArrayPreferenceKey"] is [[Int]])
@@ -91,6 +98,22 @@ struct SemanticPlistSmoke {
         let unpacked2 = try NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(archive2) as! NSDictionary
         precondition(unpacked1["account"] as? String == "Updated User")
         precondition(unpacked2["account"] as? String == "Updated User")
+        let changedArchivedKeyXML = read.text.replacingOccurrences(
+            of: "hex:" + key32.map { String(format: "%02x", $0) }.joined(),
+            with: "hex:" + key32.dropLast().map { String(format: "%02x", $0) }.joined() + "20"
+        )
+        let archivedChangedBytes = try SemanticPlistEngine.save(
+            changedArchivedKeyXML, original: binary, kind: read.kind
+        )
+        let archivedChangedRoot = try PropertyListSerialization.propertyList(
+            from: archivedChangedBytes, options: [], format: nil
+        ) as! [String: Any]
+        let archivedChanged = Data(base64Encoded: archivedChangedRoot["FXCachingCommon.linkedAccountsData"] as! String)!
+        let archiveReopened = try NSKeyedUnarchiver.unarchiveTopLevelObjectWithData(archivedChanged) as! NSDictionary
+        var keyExpected = key32
+        keyExpected[keyExpected.count - 1] = 0x20
+        precondition((archiveReopened["publicKey"] as? Data) == keyExpected,
+                     "NSKeyedArchiver NSData must keep its original binary type after editing")
         let counts = editedRoot["kCompositeEventsArrayPreferenceKey"] as! [[Int]]
         precondition(counts.count == 2 && counts[0].count == 150 && counts[1].count == 200)
         print("PASS semantic plist: clean XML, numeric IDs intact, Base64 archives flattened, original graph patch/rearchive, all arrays preserved")
