@@ -136,6 +136,14 @@ enum ReadablePlistEngine {
         }
         if let text = input as? String {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Decode the Base64 bytes explicitly rather than relying on
+            // generic format sniffing of the envelope's UTF-8 source text.
+            if isLikelyBase64(trimmed),
+               let binary = Data(base64Encoded: trimmed.filter { !$0.isWhitespace }),
+               let parsed = try? UniversalPlistCodec.decode(binary) {
+                return UniversalPlistCodec.Decoded(object: parsed.object,
+                                                  encoding: .base64(parsed.encoding))
+            }
             if trimmed.hasPrefix("{") || trimmed.hasPrefix("[") ||
                trimmed.hasPrefix("<?xml") || trimmed.hasPrefix("<plist") ||
                isLikelyBase64(trimmed) {
