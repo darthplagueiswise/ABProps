@@ -97,6 +97,7 @@ enum ReadablePlistEngine {
 
     private static func expand(_ object: Any, depth: Int, stats: inout Statistics) -> Any {
         guard depth <= maxDepth else { return object }
+        if object is NSNull { return [signature: version, "envelope": "json-null", "decoded_value": "null"] }
         if let dict = object as? [String: Any] {
             if dict["$archiver"] as? String == "NSKeyedArchiver" {
                 stats.archiveGraphs += 1
@@ -233,6 +234,13 @@ enum ReadablePlistEngine {
             throw ConversionError.damaged("profundidade de codificação excedida")
         }
         if let dict = object as? [String: Any] {
+            if dict[signature] as? String == version,
+               dict["envelope"] as? String == "json-null" {
+                guard dict["decoded_value"] as? String == "null" else {
+                    throw ConversionError.damaged("marcador null editado incorretamente")
+                }
+                return NSNull()
+            }
             if dict[signature] as? String == version,
                let envelope = dict["envelope"] as? String,
                let wrapped = dict["decoded_value"] {
