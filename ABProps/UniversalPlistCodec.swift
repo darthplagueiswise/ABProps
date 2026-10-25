@@ -192,6 +192,60 @@ enum UniversalPlistCodec {
         return any
     }
 
+
+    /// Exhaustive depth-first search; array items are NEVER summarized or skipped.
+    /// Returned paths locate the precise matching key/value, including decoded embedded data.
+    static func fullTextMatches(_ root: Any, query: String) -> [UniversalNodeRef] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return [] }
+        var stack: [(Any, [UniversalPathPart], Int)] = [(root, [], 0)]
+        var matches: [UniversalNodeRef] = []
+        while let (value, path, embeddingDepth) = stack.popLast() {
+            if let dictionary = value as? [String: Any] {
+                for key in dictionary.keys.sorted().reversed() {
+                    guard let child = dictionary[key] else { continue }
+                    let childPath = path + [.key(key)]
+                    if key.localizedStandardContains(needle) {
+                        matches.append(UniversalNodeRef(title: key, path: childPath))
+                    } else if children(child, path: childPath).isEmpty &&
+                              summary(child).localizedStandardContains(needle) {
+                        matches.append(UniversalNodeRef(title: key, path: childPath))
+                    }
+                    stack.append((child, childPath, embeddingDepth))
+                }
+            } else if let array = value as? [Any] {
+                // Reverse push preserves ascending display order.
+                for index in array.indices.reversed() {
+                    let child = array[index]
+                    let childPath = path + [.index(index)]
+                    if children(child, path: childPath).isEmpty &&
+                       summary(child).localizedStandardContains(needle) {
+                        matches.append(UniversalNodeRef(title: "[" + String(index) + "]", path: childPath))
+                    }
+                    stack.append((child, childPath, embeddingDepth))
+                }
+            } else if embeddingDepth < maxNesting, let decoded = embedded(value) {
+                stack.append((decoded.object, path + [.embedded], embeddingDepth + 1))
+            } else if path.isEmpty && summary(value).localizedStandardContains(needle) {
+                matches.append(UniversalNodeRef(title: "Raiz", path: []))
+            }
+        }
+        // One match per structural path, rather than repeated matching parent summaries.
+        var seen = Set<String>()
+        return matches.filter { seen.insert($0.id).inserted }
+    }
+
+    static func pathLabel(_ path: [UniversalPathPart]) -> String {
+        if path.isEmpty { return "/" }
+        return path.map {
+            switch $0 {
+            case .key(let k): return k
+            case .index(let index): return "[" + String(index) + "]"
+            case .embedded: return "(decodificado)"
+            }
+        }.joined(separator: " / ")
+    }
+
     static func kind(_ value: Any) -> String {
         if value is [String: Any] { return "Dicionário" }
         if value is [Any] { return "Array" }
@@ -343,6 +397,7 @@ final class UniversalDocumentStore {
     var original: Data?
     var encoding: UniversalEncoding?
     var fileName = ""
+    var sourceURL: URL?
     var dirty = false
     var error: String?
     private var undoStack: [Any] = []
@@ -353,6 +408,7 @@ final class UniversalDocumentStore {
         original = bytes
         encoding = document.encoding
         fileName = name
+        sourceURL = nil
         dirty = false
         error = nil
         undoStack.removeAll()
@@ -371,6 +427,32 @@ final class UniversalDocumentStore {
         undoStack.append(root)
         self.root = updated
         dirty = true
+    }
+
+    /// Saves changes to the imported document using Apple's coordinated file access.
+    /// Unlike Export, Save retains the exact original envelope (including Base64).
+    func save() throws {
+        guard let url = sourceURL, let root, let original, let encoding else {
+            throw UniversalError.unsupported("não existe um arquivo original gravável; use Exportar")
+        }
+        let data = try UniversalPlistCodec.export(
+            root, format: .original, original: original, encoding: encoding, dirty: dirty
+        )
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        var coordinationError: NSError?
+        var writeError: Error?
+        coordinator.coordinate(writingItemAt: url, options: .forReplacing,
+                               error: &coordinationError) { target in
+            do { try data.write(to: target, options: [.atomic]) }
+            catch { writeError = error }
+        }
+        if let error = coordinationError { throw error }
+        if let error = writeError { throw error }
+        self.original = data
+        dirty = false
+        undoStack.removeAll()
     }
 
     func undo() {
