@@ -12,12 +12,14 @@ struct SourceJump: Equatable {
 struct XMLSourceEditor: UIViewRepresentable {
     @Binding var text: String
     let jump: SourceJump?
+    let fontSize: Double
     var onEdit: (String) -> Void
 
     func makeUIView(context: Context) -> SourceEditorHost {
         let host = SourceEditorHost()
         host.editor.delegate = context.coordinator
         host.editor.text = text
+        host.setFontSize(CGFloat(fontSize))
         host.applySyntax()
         context.coordinator.host = host
         return host
@@ -25,6 +27,7 @@ struct XMLSourceEditor: UIViewRepresentable {
 
     func updateUIView(_ host: SourceEditorHost, context: Context) {
         context.coordinator.parent = self
+        host.setFontSize(CGFloat(fontSize))
         if host.editor.text != text {
             let insertion = host.editor.selectedRange
             host.editor.text = text
@@ -70,6 +73,7 @@ final class SourceEditorHost: UIView {
     let gutter = SourceLineNumberGutter(frame: .zero)
     private var starts = [0]
     private let leftInset: CGFloat = 57
+    var selectedFontSize: CGFloat = 12
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -77,7 +81,7 @@ final class SourceEditorHost: UIView {
         editor.backgroundColor = .clear
         editor.textColor = UIColor(white: 0.91, alpha: 1)
         editor.tintColor = UIColor(red: 0.40, green: 0.72, blue: 1.00, alpha: 1)
-        editor.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
+        editor.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         editor.textContainerInset = UIEdgeInsets(top: 18, left: leftInset, bottom: 28, right: 18)
         editor.textContainer.lineFragmentPadding = 0
         editor.smartQuotesType = .no
@@ -103,6 +107,13 @@ final class SourceEditorHost: UIView {
         super.layoutSubviews()
         editor.frame = bounds
         gutter.frame = CGRect(x: 0, y: 0, width: leftInset - 12, height: bounds.height)
+        gutter.setNeedsDisplay()
+    }
+
+    func setFontSize(_ size: CGFloat) {
+        guard abs(size - selectedFontSize) > 0.01 else { return }
+        selectedFontSize = size
+        editor.font = .monospacedSystemFont(ofSize: size, weight: .regular)
         gutter.setNeedsDisplay()
     }
 
@@ -181,7 +192,7 @@ final class SourceLineNumberGutter: UIView {
         )
         let glyphs = manager.glyphRange(forBoundingRect: visible, in: area)
         context.saveGState()
-        let font = UIFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        let font = UIFont.monospacedDigitSystemFont(ofSize: max(9, min(15, owner.selectedFontSize - 1)), weight: .medium)
         let attrs: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: UIColor(red: 0.58, green: 0.62, blue: 0.69, alpha: 1)
