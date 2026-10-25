@@ -357,7 +357,7 @@ private struct UniversalTreeView: View {
                         .padding(.vertical, 4)
                     }
 
-                    Section("Estrutura completa") {
+                    Section {
                         ForEach(children(of: value)) { child in
                             if let childValue = document.value(at: child.path) {
                                 let expandable = !UniversalPlistCodec.children(childValue, path: child.path).isEmpty
@@ -392,6 +392,8 @@ private struct UniversalTreeView: View {
                                 }
                             }
                         }
+                    } header: {
+                        Text("Estrutura completa")
                     } footer: {
                         Text("Todos os elementos estão presentes. A busca filtra apenas a visualização; não modifica o arquivo.")
                     }
