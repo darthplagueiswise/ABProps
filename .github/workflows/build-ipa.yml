@@ -26,6 +26,12 @@ jobs:
           test "$SDK_MAJOR" = "27"
           echo "iphoneos SDK=$(xcrun --sdk iphoneos --show-sdk-version)"
 
+      - name: Verify lossless Universal Plist transformations
+        run: |
+          set -euo pipefail
+          swiftc -swift-version 5 ABProps/UniversalPlistCodec.swift tests/UniversalCodecSmoke.swift -o /tmp/universal-codec-smoke
+          /tmp/universal-codec-smoke
+
       - name: Build Capstone ARM64 static lib (iphoneos SDK 27)
         run: |
           set -e
