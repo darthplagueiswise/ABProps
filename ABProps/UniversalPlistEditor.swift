@@ -7,6 +7,10 @@ struct UniversalPlistEditorView: View {
     @State private var document = UniversalDocumentStore()
     @State private var isImporting = false
     @State private var search = ""
+    @State private var isSearching = false
+    @State private var matches: [UniversalNodeRef] = []
+    @FocusState private var searchIsFocused: Bool
+    @Namespace private var glassSearch
     @State private var selectedEdit: UniversalEditTarget?
 
     var body: some View {
@@ -14,6 +18,8 @@ struct UniversalPlistEditorView: View {
             Group {
                 if document.root == nil {
                     landing
+                } else if isSearching && !search.isEmpty {
+                    searchResultsView
                 } else {
                     UniversalTreeView(
                         document: document,
@@ -25,6 +31,27 @@ struct UniversalPlistEditorView: View {
             }
             .navigationTitle("Plist Universal")
             .navigationBarTitleDisplayMode(.large)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if document.root != nil {
+                    glassSearchBar
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                }
+            }
+            .task(id: search) {
+                guard isSearching, !search.isEmpty, let root = document.root else {
+                    matches = []
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(220))
+                guard !Task.isCancelled else { return }
+                matches = UniversalPlistCodec.fullTextMatches(root, query: search)
+            }
+            .onChange(of: document.dirty) { _, _ in
+                if !search.isEmpty, let root = document.root {
+                    matches = UniversalPlistCodec.fullTextMatches(root, query: search)
+                }
+            }
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
@@ -35,6 +62,14 @@ struct UniversalPlistEditorView: View {
                     .accessibilityLabel("Abrir plist, JSON ou Base64")
 
                     if document.root != nil {
+                        Button {
+                            do { try document.save() }
+                            catch { document.error = error.localizedDescription }
+                        } label: {
+                            Label("Salvar", systemImage: "square.and.arrow.down")
+                        }
+                        .disabled(!document.dirty)
+
                         Button {
                             document.undo()
                         } label: {
@@ -53,7 +88,7 @@ struct UniversalPlistEditorView: View {
                     }
                 }
             }
-            .searchable(text: $search, prompt: "Filtrar chaves nesta pasta")
+
         }
         .fileImporter(
             isPresented: $isImporting,
@@ -65,7 +100,10 @@ struct UniversalPlistEditorView: View {
                 let granted = url.startAccessingSecurityScopedResource()
                 defer { if granted { url.stopAccessingSecurityScopedResource() } }
                 try document.open(Data(contentsOf: url), name: url.lastPathComponent)
+                document.sourceURL = url
                 search = ""
+                matches = []
+                isSearching = false
             } catch {
                 document.error = error.localizedDescription
             }
@@ -81,6 +119,129 @@ struct UniversalPlistEditorView: View {
         } message: {
             Text(document.error ?? "")
         }
+    }
+
+
+    @ViewBuilder
+    private var glassSearchBar: some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: 12) {
+                HStack(spacing: 12) {
+                    if isSearching {
+                        HStack(spacing: 10) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(.secondary)
+                            TextField("Buscar em todas as chaves e valores", text: $search)
+                                .focused($searchIsFocused)
+                                .submitLabel(.search)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .accessibilityLabel("Buscar no documento inteiro")
+                                .accessibilityHint("Busca dentro de arrays, JSON e Base64 decodificados")
+                            if !search.isEmpty {
+                                Button {
+                                    search = ""
+                                    matches = []
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .accessibilityLabel("Limpar busca")
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(height: 48)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                        .glassEffectID("universal-search", in: glassSearch)
+
+                        Button("Cancelar") {
+                            withAnimation(.smooth(duration: 0.35)) {
+                                isSearching = false
+                                search = ""
+                                matches = []
+                            }
+                            searchIsFocused = false
+                        }
+                        .buttonStyle(.glass)
+                    } else {
+                        Spacer()
+                        Button {
+                            withAnimation(.smooth(duration: 0.35)) {
+                                isSearching = true
+                            }
+                            searchIsFocused = true
+                        } label: {
+                            Label("Buscar", systemImage: "magnifyingglass")
+                                .frame(height: 40)
+                                .padding(.horizontal, 10)
+                        }
+                        .buttonStyle(.plain)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                        .glassEffectID("universal-search", in: glassSearch)
+                        .accessibilityLabel("Expandir busca em todo o documento")
+                    }
+                }
+            }
+            .animation(.smooth(duration: 0.35), value: isSearching)
+        } else {
+            HStack {
+                TextField("Buscar", text: $search)
+                    .textFieldStyle(.roundedBorder)
+                Button("Limpar") { search = "" }
+            }
+        }
+    }
+
+    private var searchResultsView: some View {
+        List {
+            Section {
+                LabeledContent("Resultados", value: String(matches.count))
+                if matches.isEmpty {
+                    ContentUnavailableView.search(text: search)
+                }
+            }
+            Section("Correspondências em qualquer nível") {
+                ForEach(matches) { item in
+                    if let value = document.value(at: item.path) {
+                        let expandable = !UniversalPlistCodec.children(value, path: item.path).isEmpty
+                        if expandable {
+                            NavigationLink {
+                                UniversalTreeView(
+                                    document: document,
+                                    path: item.path,
+                                    search: "",
+                                    onEdit: { selectedEdit = UniversalEditTarget(path: $0) }
+                                )
+                                .navigationTitle(item.title)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    UniversalNodeLabel(title: item.title, value: value)
+                                    Text(UniversalPlistCodec.pathLabel(item.path))
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(3)
+                                }
+                            }
+                        } else {
+                            Button {
+                                selectedEdit = UniversalEditTarget(path: item.path)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    UniversalNodeLabel(title: item.title, value: value)
+                                    Text(UniversalPlistCodec.pathLabel(item.path))
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(3)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(UniversalPlistCodec.editableText(value) == nil)
+                        }
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
     }
 
     @ViewBuilder
