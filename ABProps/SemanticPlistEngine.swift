@@ -173,6 +173,21 @@ enum SemanticPlistEngine {
                 return try items.map { try archiveResolve($0, objects: objects,
                                                            depth: depth + 1, visiting: visiting) }
             }
+            if className.hasSuffix("Dictionary"),
+               let keys = map["NS.keys"] as? [Any],
+               let values = map["NS.objects"] as? [Any], keys.count == values.count {
+                var readable: [String: Any] = [:]
+                for (keyReference, valueReference) in zip(keys, values) {
+                    let key = try archiveResolve(keyReference, objects: objects,
+                                                 depth: depth + 1, visiting: visiting)
+                    guard let name = key as? String else {
+                        throw Failure.invalid("NSDictionary arquivado com chave não textual.")
+                    }
+                    readable[name] = try archiveResolve(valueReference, objects: objects,
+                                                        depth: depth + 1, visiting: visiting)
+                }
+                return readable
+            }
             if className == "NSDate", let seconds = map["NS.time"] as? NSNumber {
                 return Date(timeIntervalSinceReferenceDate: seconds.doubleValue)
             }
@@ -299,6 +314,24 @@ enum SemanticPlistEngine {
         }
         if var dict = original as? [String: Any] {
             let className = archiveClass(dict, objects: objects)
+            if className.hasSuffix("Dictionary"),
+               let keyRefs = dict["NS.keys"] as? [Any],
+               let valueRefs = dict["NS.objects"] as? [Any],
+               keyRefs.count == valueRefs.count {
+                guard let target = edited as? [String: Any], target.count == keyRefs.count else {
+                    throw Failure.invalid("Não é permitido alterar a estrutura do NSDictionary arquivado.")
+                }
+                for (keyRef, valueRef) in zip(keyRefs, valueRefs) {
+                    let key = try archiveResolve(keyRef, objects: objects,
+                                                 depth: depth + 1, visiting: [])
+                    guard let name = key as? String, let newValue = target[name] else {
+                        throw Failure.invalid("Chave NSDictionary não encontrada.")
+                    }
+                    try archivePatch(valueRef, edited: newValue, objects: &objects,
+                                     changed: &changed, depth: depth + 1)
+                }
+                return
+            }
             if className.hasSuffix("Array"), let oldItems = dict["NS.objects"] as? [Any] {
                 guard let editedArray = edited as? [Any], editedArray.count == oldItems.count else {
                     throw Failure.invalid("Não é possível adicionar/remover itens diretamente de um NSArray arquivado.")
