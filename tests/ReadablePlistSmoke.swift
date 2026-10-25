@@ -49,6 +49,9 @@ struct ReadablePlistSmoke {
         let reBase64 = editedRoot["encodedJSON"] as! String
         let decoded = Data(base64Encoded: reBase64)!
         let text = String(decoding: decoded, as: UTF8.self)
+        print("DEBUG normalized changed XML", changedXML.components(separatedBy: "edited Base64 JSON").count - 1)
+        print("DEBUG decoded Base64 JSON", text)
+        print("DEBUG plain JSON", String(describing: editedRoot["plainJSON"]))
         precondition(text.contains("edited Base64 JSON"), "Edited text is reencoded in original Base64 field")
         let nullJSON = try JSONSerialization.jsonObject(with: decoded, options: []) as! [String: Any]
         precondition(nullJSON["empty"] is NSNull, "JSON null is not dropped")
