@@ -20,7 +20,7 @@ struct UniversalPlistEditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            compactToolbar
             if workspace.current != nil { tabStrip }
             Group {
                 if let document = workspace.current {
@@ -34,8 +34,8 @@ struct UniversalPlistEditorView: View {
                         onEdit: { workspace.textChanged($0, for: document.id) }
                     )
                     .id(document.id)
-                    .ignoresSafeArea(.keyboard, edges: .bottom)
-                    statusLine(document)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .layoutPriority(1)
                 } else {
                     emptyState
                 }
@@ -43,6 +43,14 @@ struct UniversalPlistEditorView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .background(Color(red: 0.060, green: 0.066, blue: 0.082))
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let document = workspace.current {
+                bottomGlassToolbar(document)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 5)
+                    .padding(.bottom, 4)
+            }
+        }
         .fileImporter(isPresented: $importing,
                       allowedContentTypes: [.item, .data, .propertyList, .json, .plainText],
                       allowsMultipleSelection: true) { result in
@@ -83,109 +91,111 @@ struct UniversalPlistEditorView: View {
                     .font(.footnote.weight(.medium))
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)
-                    .background(.thickMaterial, in: Capsule())
+                    .glassEffect(.regular, in: .capsule)
                     .onTapGesture { workspace.notice = nil }
-                    .padding(.bottom, 44)
+                    .padding(.bottom, 68)
             }
         }
     }
 
-    private var header: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Plist Editor")
-                        .font(.headline.weight(.semibold))
-                    Text(workspace.current?.title ?? "Nenhum documento")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+    // Compact one-line top chrome. Search is in the floating bottom dock so
+    // it never consumes a second full-height toolbar row.
+    private var compactToolbar: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Plist Universal")
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                Text(workspace.current?.title ?? "Editor XML")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-                GlassEffectContainer(spacing: 8) {
-                    HStack(spacing: 8) {
-                        Button { importing = true } label: {
-                            Image(systemName: "folder.badge.plus")
-                                .frame(width: 37, height: 40)
-                        }
-                        .accessibilityLabel("Importar arquivos")
-                        .glassEffect(.regular.interactive(), in: .circle)
+            GlassEffectContainer(spacing: 5) {
+                HStack(spacing: 5) {
+                    Button { importing = true } label: {
+                        Image(systemName: "folder.badge.plus")
+                            .frame(width: 33, height: 38)
+                    }
+                    .accessibilityLabel("Importar arquivos")
+                    .glassEffect(.regular.interactive(), in: .circle)
 
-                        Button { save() } label: {
-                            Image(systemName: "square.and.arrow.down")
-                                .frame(width: 37, height: 40)
-                        }
-                        .disabled(workspace.current == nil)
-                        .accessibilityLabel("Salvar arquivo")
-                        .glassEffect(.regular.interactive(), in: .circle)
+                    Button { save() } label: {
+                        Image(systemName: "square.and.arrow.down")
+                            .frame(width: 33, height: 38)
+                    }
+                    .disabled(workspace.current == nil)
+                    .accessibilityLabel("Salvar arquivo")
+                    .glassEffect(.regular.interactive(), in: .circle)
 
-                        Menu {
-                            Section("Exportar documento") {
-                                ForEach(PlistWorkspace.ExportMode.allCases) { mode in
-                                    Button(mode.rawValue) { export(mode) }
-                                }
+                    Menu {
+                        Section("Exportar documento") {
+                            ForEach(PlistWorkspace.ExportMode.allCases) { mode in
+                                Button(mode.rawValue) { export(mode) }
                             }
-                        } label: {
-                            Image(systemName: "square.and.arrow.up")
-                                .frame(width: 37, height: 40)
                         }
-                        .disabled(workspace.current == nil)
-                        .accessibilityLabel("Exportar arquivo")
-                        .glassEffect(.regular.interactive(), in: .circle)
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .frame(width: 33, height: 38)
+                    }
+                    .disabled(workspace.current == nil)
+                    .accessibilityLabel("Exportar arquivo")
+                    .glassEffect(.regular.interactive(), in: .circle)
 
-                        Button { showTypography = true } label: {
-                            Image(systemName: "textformat.size")
-                                .frame(width: 37, height: 40)
-                        }
-                        .accessibilityLabel("Ajustar tamanho da fonte")
-                        .glassEffect(.regular.interactive(), in: .circle)
-                        .popover(isPresented: $showTypography, arrowEdge: .top) {
-                            VStack(alignment: .leading, spacing: 14) {
-                                Text("Tamanho do texto")
-                                    .font(.headline)
-                                HStack(spacing: 10) {
-                                    Image(systemName: "textformat.size.smaller")
-                                    Slider(value: $fontSize, in: 9...22, step: 1)
-                                        .accessibilityLabel("Tamanho da fonte")
-                                    Image(systemName: "textformat.size.larger")
-                                }
-                                Text("\(Int(fontSize)) pt — Monoespaçada")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                HStack {
-                                    Button("Reduzir") { fontSize = max(9, fontSize - 1) }
-                                    Spacer()
-                                    Button("Restaurar") { fontSize = 12 }
-                                    Spacer()
-                                    Button("Aumentar") { fontSize = min(22, fontSize + 1) }
-                                }
-                                .buttonStyle(.glass)
+                    Button { showTypography = true } label: {
+                        Image(systemName: "textformat.size")
+                            .frame(width: 33, height: 38)
+                    }
+                    .accessibilityLabel("Ajustar tamanho da fonte")
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .popover(isPresented: $showTypography, arrowEdge: .top) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Tamanho do código")
+                                .font(.headline)
+                            HStack(spacing: 8) {
+                                Image(systemName: "textformat.size.smaller")
+                                Slider(value: $fontSize, in: 9...22, step: 1)
+                                Image(systemName: "textformat.size.larger")
                             }
-                            .padding(20)
-                            .frame(width: 300)
-                            .presentationCompactAdaptation(.popover)
+                            Text("\(Int(fontSize)) pt · fonte monoespaçada")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            HStack {
+                                Button("Menor") { fontSize = max(9, fontSize - 1) }
+                                Spacer()
+                                Button("Restaurar") { fontSize = 12 }
+                                Spacer()
+                                Button("Maior") { fontSize = min(22, fontSize + 1) }
+                            }
+                            .buttonStyle(.glass)
                         }
+                        .padding(18)
+                        .frame(width: 296)
+                        .presentationCompactAdaptation(.popover)
                     }
                 }
+                .font(.system(size: 16, weight: .regular))
             }
-            searchBar
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
     }
 
-    private var searchBar: some View {
-        GlassEffectContainer(spacing: 8) {
-            HStack(spacing: 8) {
+    @ViewBuilder
+    private func bottomGlassToolbar(_ document: PlistWorkspace.Document) -> some View {
+        GlassEffectContainer(spacing: 7) {
+            HStack(spacing: 7) {
                 if searching {
-                    HStack(spacing: 9) {
+                    HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(.secondary)
-                        TextField("Encontrar no texto XML", text: $searchText)
+                        TextField("Buscar no XML", text: $searchText)
                             .focused($searchFocused)
+                            .font(.subheadline)
                             .submitLabel(.search)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
@@ -196,52 +206,71 @@ struct UniversalPlistEditorView: View {
                                 jump = nil
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
                             }
-                            .accessibilityLabel("Limpar pesquisa")
                         }
                     }
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, 12)
                     .frame(height: 43)
                     .glassEffect(.regular.interactive(), in: .capsule)
                     .glassEffectID("search", in: searchNamespace)
+
                     Button { searchNext(false) } label: {
                         Image(systemName: "chevron.up")
-                            .frame(width: 30, height: 42)
+                            .frame(width: 28, height: 42)
                     }
                     .disabled(searchText.isEmpty)
-                    .accessibilityLabel("Anterior")
+                    .accessibilityLabel("Resultado anterior")
                     .glassEffect(.regular.interactive(), in: .circle)
+
                     Button { searchNext(true) } label: {
                         Image(systemName: "chevron.down")
-                            .frame(width: 30, height: 42)
+                            .frame(width: 28, height: 42)
                     }
                     .disabled(searchText.isEmpty)
-                    .accessibilityLabel("Próximo")
+                    .accessibilityLabel("Próximo resultado")
                     .glassEffect(.regular.interactive(), in: .circle)
+
                     Button {
                         withAnimation(.smooth(duration: 0.32)) { searching = false }
-                        searchText = ""
                         searchFocused = false
+                        searchText = ""
                         jump = nil
                     } label: {
                         Image(systemName: "xmark")
-                            .frame(width: 30, height: 42)
+                            .frame(width: 28, height: 42)
                     }
                     .accessibilityLabel("Fechar pesquisa")
                     .glassEffect(.regular.interactive(), in: .circle)
                 } else {
-                    Spacer(minLength: 0)
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.shield")
+                            .foregroundStyle(.green)
+                        Text(document.encoding.title)
+                            .lineLimit(1)
+                        Text("·")
+                        Text("\(document.lines) linhas")
+                            .lineLimit(1)
+                        Spacer(minLength: 3)
+                        Text("\(Int(fontSize))pt")
+                        Text(document.isDirty ? "Editado" : "Original")
+                            .foregroundStyle(document.isDirty ? .orange : .secondary)
+                    }
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .frame(height: 43)
+                    .glassEffect(.regular, in: .capsule)
+
                     Button {
                         withAnimation(.smooth(duration: 0.32)) { searching = true }
                         searchFocused = true
                     } label: {
-                        Label("Buscar", systemImage: "magnifyingglass")
-                            .font(.subheadline.weight(.medium))
-                            .padding(.horizontal, 16)
-                            .frame(height: 43)
+                        Image(systemName: "magnifyingglass")
+                            .frame(width: 35, height: 42)
                     }
-                    .disabled(workspace.current == nil)
-                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .accessibilityLabel("Buscar no arquivo")
+                    .glassEffect(.regular.interactive(), in: .circle)
                     .glassEffectID("search", in: searchNamespace)
                 }
             }
@@ -296,28 +325,7 @@ struct UniversalPlistEditorView: View {
                 .padding(.horizontal, 12)
             }
         }
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
-    }
-
-    private func statusLine(_ document: PlistWorkspace.Document) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "checkmark.shield")
-                .foregroundStyle(.green)
-            Text(document.encoding.title)
-            Text("·")
-            Text("\(document.lines) linhas")
-            Spacer()
-            Text("\(Int(fontSize)) pt")
-            Text("·")
-            Text(document.isDirty ? "Editado" : "Original")
-                .foregroundStyle(document.isDirty ? .orange : .secondary)
-        }
-        .font(.caption2.monospacedDigit())
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 13)
-        .padding(.vertical, 9)
-        .background(.ultraThinMaterial)
+        .padding(.vertical, 3)
     }
 
     private var emptyState: some View {
