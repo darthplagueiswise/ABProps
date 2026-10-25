@@ -282,7 +282,7 @@ final class PlistTextDocument {
 
     func validate() throws {
         guard let format = sourceFormat else { throw UniversalError.invalidFormat }
-        _ = try ReadablePlistEngine.reconstruct(text, originalFormat: format, originalBytes: original)
+        _ = try ReadablePlistEngine.reconstruct(text, originalFormat: format, originalBytes: rawOriginal)
     }
 
     /// Write atomically to the original file. If the Files provider lacks write access, use Export.
