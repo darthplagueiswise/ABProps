@@ -52,7 +52,7 @@ struct ReadablePlistSmoke {
         print("DEBUG normalized changed XML", changedXML.components(separatedBy: "edited Base64 JSON").count - 1)
         print("DEBUG decoded Base64 JSON", text)
         print("DEBUG plain JSON", String(describing: editedRoot["plainJSON"]))
-        guard text.contains("edited Base64 JSON") else { fatalError("decoded Base64 JSON="+text+"; XML replacements="+String(changedXML.components(separatedBy:"edited Base64 JSON").count - 1)) }
+        guard text.contains("edited Base64 JSON") else { fatalError("decoded Base64 JSON="+text+"; XML replacements="+String(changedXML.components(separatedBy:"edited Base64 JSON").count - 1)+"; encodedJSON fragment="+String(output.xml.components(separatedBy:"<key>encodedJSON</key>").last?.prefix(900) ?? "")) }
         let nullJSON = try JSONSerialization.jsonObject(with: decoded, options: []) as! [String: Any]
         precondition(nullJSON["empty"] is NSNull, "JSON null is not dropped")
         let flags = nullJSON["flags"] as! [Any]
