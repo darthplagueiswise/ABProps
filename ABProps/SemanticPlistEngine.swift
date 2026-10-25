@@ -142,7 +142,16 @@ enum SemanticPlistEngine {
     private static func uid(_ object: Any) -> Int? {
         if let map = object as? [String: Any], map.count == 1,
            let value = map["CF$UID"] as? NSNumber { return value.intValue }
-        return nil
+        // Apple's binary plist reader returns the private CFKeyedArchiverUID value
+        // directly, not a dictionary. We inspect its descriptive numeric value
+        // without instantiating or invoking private classes.
+        let typeName = String(describing: type(of: object))
+        guard typeName.contains("CFKeyedArchiverUID") else { return nil }
+        let description = String(describing: object)
+        guard let marker = description.range(of: "value = ") else { return nil }
+        let remaining = description[marker.upperBound...]
+        let digits = remaining.prefix { $0.isNumber }
+        return Int(digits)
     }
 
     private static func archiveClass(_ object: [String: Any], objects: [Any]) -> String {
