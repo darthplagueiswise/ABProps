@@ -136,8 +136,9 @@ enum SemanticPlistEngine {
     /// and an encoding-specific marker; structured payloads are handled earlier.
     private static func rawBase64(_ text: String) -> Data? {
         let compact = text.filter { !$0.isWhitespace }
-        guard compact.count >= 12, compact.count.isMultiple(of: 4),
+        guard compact.count >= 4, compact.count.isMultiple(of: 4),
               compact.contains(where: { $0 == "=" || $0 == "+" || $0 == "/" }),
+              (compact.count >= 12 || compact.contains("=")),
               !compact.allSatisfy(\.isNumber),
               let decoded = Data(base64Encoded: compact),
               !decoded.isEmpty,
