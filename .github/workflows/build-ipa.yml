@@ -32,6 +32,12 @@ jobs:
           swiftc -swift-version 5 ABProps/UniversalPlistCodec.swift tests/UniversalCodecSmoke.swift -o /tmp/universal-codec-smoke
           /tmp/universal-codec-smoke
 
+      - name: Validate recursive JSON, Base64 and binary plist editor
+        run: |
+          set -euo pipefail
+          swiftc -swift-version 5 ABProps/UniversalPlistCodec.swift ABProps/ReadablePlistEngine.swift tests/ReadablePlistSmoke.swift -o /tmp/readable-plist-smoke
+          /tmp/readable-plist-smoke
+
       - name: Build Capstone ARM64 static lib (iphoneos SDK 27)
         run: |
           set -e
