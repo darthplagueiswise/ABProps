@@ -22,6 +22,8 @@
         A1000D /* UniversalPlistEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11010 /* UniversalPlistEditor.swift */; };
         A1000E /* ReadablePlistEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11011 /* ReadablePlistEngine.swift */; };
         A1000F /* XMLSourceEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11012 /* XMLSourceEditor.swift */; };
+        A10010 /* SemanticPlistEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11013 /* SemanticPlistEngine.swift */; };
+        A10011 /* PlistWorkspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11014 /* PlistWorkspace.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -44,6 +46,8 @@
         A11010 /* UniversalPlistEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UniversalPlistEditor.swift; sourceTree = "<group>"; };
         A11011 /* ReadablePlistEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadablePlistEngine.swift; sourceTree = "<group>"; };
         A11012 /* XMLSourceEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XMLSourceEditor.swift; sourceTree = "<group>"; };
+        A11013 /* SemanticPlistEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticPlistEngine.swift; sourceTree = "<group>"; };
+        A11014 /* PlistWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlistWorkspace.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -80,6 +84,8 @@
 				A11010 /* UniversalPlistEditor.swift */,
                 A11011 /* ReadablePlistEngine.swift */,
                 A11012 /* XMLSourceEditor.swift */,
+                A11013 /* SemanticPlistEngine.swift */,
+                A11014 /* PlistWorkspace.swift */,
 				A1100D /* ios-abprops-names.json */,
 				A11008 /* CSUtil.c */,
 				A11009 /* CSUtil.h */,
@@ -180,6 +186,8 @@
 				A1000D /* UniversalPlistEditor.swift in Sources */,
                 A1000E /* ReadablePlistEngine.swift in Sources */,
                 A1000F /* XMLSourceEditor.swift in Sources */,
+                A10010 /* SemanticPlistEngine.swift in Sources */,
+                A10011 /* PlistWorkspace.swift in Sources */,
 				A10007 /* CSUtil.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
