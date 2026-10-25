@@ -260,7 +260,7 @@ enum SemanticPlistEngine {
             if className == "NSDate", let seconds = map["NS.time"] as? NSNumber {
                 return Date(timeIntervalSinceReferenceDate: seconds.doubleValue)
             }
-            if className == "NSData", let bytes = map["NS.data"] as? Data { return bytes }
+            if className.hasSuffix("Data"), let bytes = map["NS.data"] as? Data { return bytes }
             if className == "NSString", let str = map["NS.string"] as? String { return str }
             var pretty: [String: Any] = [:]
             if !className.isEmpty { pretty["_class"] = className }
@@ -417,6 +417,17 @@ enum SemanticPlistEngine {
                 for (lhs, rhs) in zip(oldItems, editedArray) {
                     try archivePatch(lhs, edited: rhs, objects: &objects,
                                      changed: &changed, depth: depth + 1)
+                }
+                return
+            }
+            if className.hasSuffix("Data"), let previous = dict["NS.data"] as? Data {
+                let replacement = try binaryParse(edited)
+                if replacement != previous {
+                    dict["NS.data"] = replacement
+                    if let index = objects.indices.first(where: { i in
+                        guard let entry = objects[i] as? [String: Any] else { return false }
+                        return equal(entry, original)
+                    }) { objects[index] = dict }
                 }
                 return
             }
