@@ -44,34 +44,6 @@ jobs:
           swiftc -swift-version 5 ABProps/UniversalPlistCodec.swift ABProps/SemanticPlistEngine.swift tests/SemanticPlistSmoke.swift -o /tmp/semantic-plist-smoke
           /tmp/semantic-plist-smoke
 
-      - name: Build Capstone ARM64 static lib (iphoneos SDK 27)
-        run: |
-          set -e
-          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          git clone --depth 1 https://github.com/capstone-engine/capstone.git Vendor/capstone
-          cmake -S Vendor/capstone -B Vendor/capstone-build -G Xcode \
-            -DCMAKE_SYSTEM_NAME=iOS \
-            -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=27.0 \
-            -DCMAKE_OSX_SYSROOT=iphoneos \
-            -DCAPSTONE_BUILD_SHARED=OFF \
-            -DCAPSTONE_BUILD_CSTOOL=OFF \
-            -DCAPSTONE_BUILD_TESTS=OFF \
-            -DCAPSTONE_ARCHITECTURE_DEFAULT=OFF \
-            -DCAPSTONE_ARM64_SUPPORT=ON \
-            -DCAPSTONE_AARCH64_SUPPORT=ON
-          cmake --build Vendor/capstone-build --config Release -- \
-            -sdk iphoneos -arch arm64 \
-            CODE_SIGNING_ALLOWED=NO \
-            GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-            OTHER_CFLAGS="-Wno-error -Wno-shorten-64-to-32"
-          LIB=$(find Vendor/capstone-build -name 'libcapstone.a' | head -n 1)
-          echo "LIB=$LIB"
-          test -f "$LIB"
-          cp "$LIB" Vendor/capstone-build/libcapstone.a
-          ls -lh Vendor/capstone-build/libcapstone.a
-          lipo -info Vendor/capstone-build/libcapstone.a
-
       - name: Build for device (unsigned)
         run: |
           mkdir -p build
