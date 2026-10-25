@@ -1,6 +1,7 @@
 import Foundation
 import CoreFoundation
 import Observation
+import CryptoKit
 
 /// The on-screen XML is a loss-aware interchange representation.
 /// Embedded JSON and plist containers are expanded inside explicit, reversible envelopes.
@@ -51,8 +52,42 @@ enum ReadablePlistEngine {
         return Loaded(xml: xml, original: bytes, encoding: decoded.encoding, statistics: info)
     }
 
-    private static func container(_ encoding: String, value: Any) -> [String: Any] {
-        [signature: version, "envelope": encoding, "decoded_value": value]
+    private static func sha256(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Canonicalizes an XML plist through one XML parse to get the exact
+    /// representation a UITextView edit will return (not raw CFKeyedArchiverUID objects).
+    private static func visibleDigest(_ object: Any) -> String? {
+        guard let serialized = try? PropertyListSerialization.data(
+            fromPropertyList: object, format: .xml, options: 0
+        ), let reparsed = try? PropertyListSerialization.propertyList(
+            from: serialized, options: [], format: nil
+        ), let canonical = try? PropertyListSerialization.data(
+            fromPropertyList: reparsed, format: .xml, options: 0
+        ) else { return nil }
+        return sha256(canonical)
+    }
+
+    private static func carrierBytes(_ object: Any) -> Data? {
+        if let raw = object as? Data { return raw }
+        if let text = object as? String { return Data(text.utf8) }
+        return nil
+    }
+
+    private static func container(_ encoding: String, value: Any, carrier: Any) -> [String: Any] {
+        var result: [String: Any] = [
+            signature: version,
+            "envelope": encoding,
+            "decoded_value": value
+        ]
+        if let digest = visibleDigest(value) {
+            result["integrity_of_decoded_value"] = digest
+        }
+        if let raw = carrierBytes(carrier) {
+            result["integrity_of_original_carrier"] = sha256(raw)
+        }
+        return result
     }
 
     private static func originalKind(_ object: Any) -> String {
@@ -81,7 +116,7 @@ enum ReadablePlistEngine {
         guard let inner = decodeEmbedded(object), depth < maxDepth else { return object }
         stats.decodedContainers += 1
         let value = expand(inner.object, depth: depth + 1, stats: &stats)
-        return container(originalKind(object) + "|" + token(inner.encoding), value: value)
+        return container(originalKind(object) + "|" + token(inner.encoding), value: value, carrier: object)
     }
 
     private static func decodeEmbedded(_ input: Any) -> UniversalPlistCodec.Decoded? {
@@ -205,6 +240,16 @@ enum ReadablePlistEngine {
                 guard parts.count == 2,
                       (parts[0] == "data" || parts[0] == "string") else {
                     throw ConversionError.damaged("envelope adulterado")
+                }
+                if let old,
+                   let raw = carrierBytes(old),
+                   let originalHash = dict["integrity_of_original_carrier"] as? String,
+                   let visibleHash = dict["integrity_of_decoded_value"] as? String,
+                   sha256(raw) == originalHash,
+                   visibleDigest(wrapped) == visibleHash {
+                    // A different key may be edited, but preserve this unmodified
+                    // NSKeyedArchiver's exact data, including UID and object-table bytes.
+                    return old
                 }
                 if let old, let decoded = decodeEmbedded(old) {
                     var ignored = Statistics()
