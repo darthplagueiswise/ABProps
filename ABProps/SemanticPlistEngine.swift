@@ -146,7 +146,7 @@ enum SemanticPlistEngine {
         // directly, not a dictionary. We inspect its descriptive numeric value
         // without instantiating or invoking private classes.
         let description = String(describing: object)
-        guard description.contains("CFKeyedArchiverUID"),
+        guard description.hasPrefix("<CFKeyedArchiverUID "),
               let marker = description.range(of: "value = ") else { return nil }
         let remaining = description[marker.upperBound...]
         let digits = remaining.prefix { $0.isNumber }
