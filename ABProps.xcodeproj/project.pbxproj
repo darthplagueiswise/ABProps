@@ -78,6 +78,8 @@
 				A1100E /* WebABProps.swift */,
 				A1100F /* UniversalPlistCodec.swift */,
 				A11010 /* UniversalPlistEditor.swift */,
+                A11011 /* ReadablePlistEngine.swift */,
+                A11012 /* XMLSourceEditor.swift */,
 				A1100D /* ios-abprops-names.json */,
 				A11008 /* CSUtil.c */,
 				A11009 /* CSUtil.h */,
@@ -176,6 +178,8 @@
 				A1000B /* WebABProps.swift in Sources */,
 				A1000C /* UniversalPlistCodec.swift in Sources */,
 				A1000D /* UniversalPlistEditor.swift in Sources */,
+                A1000E /* ReadablePlistEngine.swift in Sources */,
+                A1000F /* XMLSourceEditor.swift in Sources */,
 				A10007 /* CSUtil.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
