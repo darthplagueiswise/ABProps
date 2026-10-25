@@ -88,6 +88,63 @@ enum SemanticPlistEngine {
         return UniversalPlistCodec.Decoded(object: nested.object, encoding: .base64(nested.encoding))
     }
 
+    /// Explicit readable notation for bytes, never an unlabelled text conversion.
+    /// Data or Base64 carriers remain Data or Base64 when reconstructed.
+    private static func binaryDisplay(_ data: Data) -> String {
+        if let string = String(data: data, encoding: .utf8),
+           !string.isEmpty,
+           string.unicodeScalars.allSatisfy({ $0.value == 9 || $0.value == 10 || $0.value == 13 ||
+               ($0.value >= 32 && $0.value != 127) }) {
+            return "utf8:" + string
+        }
+        return "hex:" + data.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func binaryParse(_ display: Any) throws -> Data {
+        guard let value = display as? String else {
+            throw Failure.invalid("Dados binários devem ser editados como texto utf8: ou hex:.")
+        }
+        if value.hasPrefix("utf8:") {
+            return Data(value.dropFirst(5).utf8)
+        }
+        guard value.hasPrefix("hex:") else {
+            throw Failure.invalid("Use hex: seguido de bytes hexadecimais, ou utf8: seguido de texto.")
+        }
+        let hex = String(value.dropFirst(4)).filter { !$0.isWhitespace }
+        guard hex.count.isMultiple(of: 2),
+              hex.utf8.allSatisfy({
+                  ($0 >= 48 && $0 <= 57) || ($0 >= 65 && $0 <= 70) || ($0 >= 97 && $0 <= 102)
+              }) else {
+            throw Failure.invalid("Conteúdo hex: inválido (use 2 dígitos para cada byte).")
+        }
+        var bytes = Data()
+        bytes.reserveCapacity(hex.count / 2)
+        let characters = Array(hex.utf8)
+        for i in stride(from: 0, to: characters.count, by: 2) {
+            func digit(_ b: UInt8) -> UInt8 {
+                if b <= 57 { return b - 48 }
+                if b <= 70 { return b - 55 }
+                return b - 87
+            }
+            bytes.append(digit(characters[i]) * 16 + digit(characters[i + 1]))
+        }
+        return bytes
+    }
+
+    /// Conservative Base64 identification: an alphanumeric identifier is not,
+    /// by itself, proof that it is Base64. Require a canonical representation
+    /// and an encoding-specific marker; structured payloads are handled earlier.
+    private static func rawBase64(_ text: String) -> Data? {
+        let compact = text.filter { !$0.isWhitespace }
+        guard compact.count >= 12, compact.count.isMultiple(of: 4),
+              compact.contains(where: { $0 == "=" || $0 == "+" || $0 == "/" }),
+              !compact.allSatisfy(\.isNumber),
+              let decoded = Data(base64Encoded: compact),
+              !decoded.isEmpty,
+              decoded.base64EncodedString() == compact else { return nil }
+        return decoded
+    }
+
     private static func project(_ object: Any, depth: Int) throws -> Any {
         guard depth < maxDepth else {
             throw Failure.invalid("A profundidade de dados codificados excede o limite de 32 níveis.")
@@ -95,7 +152,7 @@ enum SemanticPlistEngine {
         if object is NSNull { return [nullKey: true] }
         if let nested = embedded(object) {
             if isArchive(nested.object) {
-                return try archiveView(nested.object)
+                return try project(archiveView(nested.object), depth: depth + 1)
             }
             return try project(nested.object, depth: depth + 1)
         }
@@ -108,6 +165,10 @@ enum SemanticPlistEngine {
         }
         if let items = object as? [Any] {
             return try items.map { try project($0, depth: depth + 1) }
+        }
+        if let data = object as? Data { return binaryDisplay(data) }
+        if let text = object as? String, let data = rawBase64(text) {
+            return binaryDisplay(data)
         }
         return object
     }
@@ -221,7 +282,7 @@ enum SemanticPlistEngine {
         if let oldNested = embedded(old) {
             let oldVisible: Any
             if isArchive(oldNested.object) {
-                oldVisible = try archiveView(oldNested.object)
+                oldVisible = try project(archiveView(oldNested.object), depth: depth + 1)
             } else {
                 oldVisible = try project(oldNested.object, depth: depth + 1)
             }
@@ -238,6 +299,15 @@ enum SemanticPlistEngine {
                 throw Failure.invalid("Conteúdo textual reconstruído não é UTF-8.")
             }
             return text
+        }
+        if let bytes = old as? Data {
+            let displayed = binaryDisplay(bytes)
+            let newData = try binaryParse(edited)
+            return (displayed == (edited as? String) || newData == bytes) ? old : newData
+        }
+        if let originalText = old as? String, let bytes = rawBase64(originalText) {
+            let decoded = try binaryParse(edited)
+            return decoded == bytes ? old : decoded.base64EncodedString()
         }
         if old is NSNull {
             if let map = edited as? [String: Any], map[nullKey] as? Bool == true { return NSNull() }
@@ -307,7 +377,7 @@ enum SemanticPlistEngine {
             let oldNode = objects[ref]
             let oldView = try archiveResolve(oldNode, objects: objects, depth: depth + 1,
                                              visiting: [ref])
-            if equal(oldView, edited) { return }
+            if equal(try project(oldView, depth: 0), edited) { return }
             guard !changed.contains(ref) else {
                 throw Failure.invalid("Objeto UID \(ref) compartilhado: referências divergentes exigem edição coordenada.")
             }
@@ -316,7 +386,7 @@ enum SemanticPlistEngine {
                              changed: &changed, depth: depth + 1)
             // For simple object table entries patch the actual referent, preserving UID.
             if !(oldNode is [String: Any]) && !(oldNode is [Any]) {
-                objects[ref] = edited
+                objects[ref] = try restore(oldNode, edited: edited, depth: 0)
             }
             return
         }
@@ -374,8 +444,8 @@ enum SemanticPlistEngine {
                                      changed: &changed, depth: depth + 1)
                 } else if let oldNumber = existing as? NSNumber, let newNumber = update as? NSNumber {
                     if !equal(oldNumber, newNumber) { dict[key] = newNumber }
-                } else if !equal(existing, update) {
-                    dict[key] = update
+                } else if !equal(try project(existing, depth: 0), update) {
+                    dict[key] = try restore(existing, edited: update, depth: 0)
                 }
             }
             if let index = objects.indices.first(where: { i in equal(objects[i], original) }) {
