@@ -31,7 +31,7 @@ struct SemanticPlistSmoke {
               let tabs = tab["tabs"] as? [[String:Any]] else { fatalError("tabs not decoded") }
         precondition(tabs[0]["id"] as? String == "1603421209951282")
         guard let linked = root["FXCachingCommon.linkedAccountsData"] as? [String: Any] else {
-            fatalError("semantic keyed archive not flattened")
+            fatalError("semantic keyed archive not flattened, value=" + String(describing: root["FXCachingCommon.linkedAccountsData"]).prefix(1200))
         }
         precondition(linked["account"] as? String == "Example User", "Archive UID dereferenced")
         let data = root["json_data"] as! [String: Any]
