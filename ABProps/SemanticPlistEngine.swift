@@ -145,10 +145,9 @@ enum SemanticPlistEngine {
         // Apple's binary plist reader returns the private CFKeyedArchiverUID value
         // directly, not a dictionary. We inspect its descriptive numeric value
         // without instantiating or invoking private classes.
-        let typeName = String(describing: type(of: object))
-        guard typeName.contains("CFKeyedArchiverUID") else { return nil }
         let description = String(describing: object)
-        guard let marker = description.range(of: "value = ") else { return nil }
+        guard description.contains("CFKeyedArchiverUID"),
+              let marker = description.range(of: "value = ") else { return nil }
         let remaining = description[marker.upperBound...]
         let digits = remaining.prefix { $0.isNumber }
         return Int(digits)
