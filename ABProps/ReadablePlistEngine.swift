@@ -154,19 +154,49 @@ enum ReadablePlistEngine {
         }
     }
 
-    static func reconstruct(_ text: String, originalFormat: UniversalEncoding) throws -> Data {
+    static func reconstruct(_ text: String, originalFormat: UniversalEncoding,
+                            originalBytes: Data? = nil) throws -> Data {
         let logical = try normalizedObject(from: text)
-        let folded = try fold(logical, depth: 0)
+        let originalRoot = originalBytes.flatMap {
+            try? UniversalPlistCodec.decode($0).object
+        }
+        let folded = try fold(logical, depth: 0, old: originalRoot)
         return try UniversalPlistCodec.encode(folded, as: originalFormat)
     }
 
-    static func converted(_ text: String, format: UniversalEncoding) throws -> Data {
+    static func converted(_ text: String, format: UniversalEncoding,
+                          originalBytes: Data? = nil) throws -> Data {
         let logical = try normalizedObject(from: text)
-        return try UniversalPlistCodec.encode(try fold(logical, depth: 0), as: format)
+        let originalRoot = originalBytes.flatMap {
+            try? UniversalPlistCodec.decode($0).object
+        }
+        return try UniversalPlistCodec.encode(
+            try fold(logical, depth: 0, old: originalRoot), as: format
+        )
     }
 
-    private static func fold(_ object: Any, depth: Int) throws -> Any {
-        guard depth <= maxDepth else { throw ConversionError.damaged("profundidade de codificação excedida") }
+    private static func same(_ first: Any, _ second: Any) -> Bool {
+        // Compare canonical plist representations without coercing numbers to strings.
+        if let a = first as? [String: Any], let b = second as? [String: Any] {
+            guard a.count == b.count else { return false }
+            return a.allSatisfy { key, value in b[key].map { same(value, $0) } ?? false }
+        }
+        if let a = first as? [Any], let b = second as? [Any] {
+            return a.count == b.count && zip(a, b).allSatisfy { same($0.0, $0.1) }
+        }
+        if let a = first as? Data, let b = second as? Data { return a == b }
+        if let a = first as? String, let b = second as? String { return a == b }
+        if let a = first as? Date, let b = second as? Date { return a == b }
+        if let a = first as? NSNumber, let b = second as? NSNumber {
+            return CFGetTypeID(a) == CFGetTypeID(b) && a == b
+        }
+        return String(describing: first) == String(describing: second)
+    }
+
+    private static func fold(_ object: Any, depth: Int, old: Any?) throws -> Any {
+        guard depth <= maxDepth else {
+            throw ConversionError.damaged("profundidade de codificação excedida")
+        }
         if let dict = object as? [String: Any] {
             if dict[signature] as? String == version,
                let envelope = dict["envelope"] as? String,
@@ -176,20 +206,40 @@ enum ReadablePlistEngine {
                       (parts[0] == "data" || parts[0] == "string") else {
                     throw ConversionError.damaged("envelope adulterado")
                 }
-                let value = try fold(wrapped, depth: depth + 1)
-                let bytes = try UniversalPlistCodec.encode(value, as: encoding(String(parts[1])))
+                if let old, let decoded = decodeEmbedded(old) {
+                    var ignored = Statistics()
+                    let originalExpanded = expand(decoded.object, depth: depth + 1,
+                                                  stats: &ignored)
+                    if same(wrapped, originalExpanded) {
+                        // An unchanged encrypted/archived/compressed binary payload
+                        // must not be serialized again. Preserve the exact source bytes.
+                        return old
+                    }
+                }
+                let oldInner = old.flatMap { decodeEmbedded($0)?.object }
+                let value = try fold(wrapped, depth: depth + 1, old: oldInner)
+                let bytes = try UniversalPlistCodec.encode(
+                    value, as: encoding(String(parts[1]))
+                )
                 if parts[0] == "data" { return bytes }
                 guard let string = String(data: bytes, encoding: .utf8) else {
                     throw ConversionError.unsupported("payload textual em encoding não UTF-8")
                 }
                 return string
             }
-            var original: [String: Any] = [:]
-            for (k, v) in dict { original[k] = try fold(v, depth: depth + 1) }
-            return original
+            let oldDict = old as? [String: Any]
+            var result: [String: Any] = [:]
+            for (key, value) in dict {
+                result[key] = try fold(value, depth: depth + 1, old: oldDict?[key])
+            }
+            return result
         }
         if let list = object as? [Any] {
-            return try list.map { try fold($0, depth: depth + 1) }
+            let oldList = old as? [Any] ?? []
+            return try list.enumerated().map { index, value in
+                let previous = oldList.indices.contains(index) ? oldList[index] : nil
+                return try fold(value, depth: depth + 1, old: previous)
+            }
         }
         return object
     }
@@ -232,7 +282,7 @@ final class PlistTextDocument {
 
     func validate() throws {
         guard let format = sourceFormat else { throw UniversalError.invalidFormat }
-        _ = try ReadablePlistEngine.reconstruct(text, originalFormat: format)
+        _ = try ReadablePlistEngine.reconstruct(text, originalFormat: format, originalBytes: original)
     }
 
     /// Write atomically to the original file. If the Files provider lacks write access, use Export.
@@ -280,16 +330,16 @@ final class PlistTextDocument {
         case .normalized:
             _ = try ReadablePlistEngine.normalizedObject(from: text)
             return Data(text.utf8)
-        case .xml: return try ReadablePlistEngine.converted(text, format: .xml)
-        case .binary: return try ReadablePlistEngine.converted(text, format: .binary)
-        case .json: return try ReadablePlistEngine.converted(text, format: .json)
+        case .xml: return try ReadablePlistEngine.converted(text, format: .xml, originalBytes: original)
+        case .binary: return try ReadablePlistEngine.converted(text, format: .binary, originalBytes: original)
+        case .json: return try ReadablePlistEngine.converted(text, format: .json, originalBytes: original)
         case .originalBase64:
             let encoded = dirty ? try ReadablePlistEngine.reconstruct(text, originalFormat: format) : original
             // If input is already Base64, return original rather than double-encoding it.
             if case .base64 = format { return encoded }
             return Data(encoded.base64EncodedString().utf8)
-        case .binaryBase64: return try ReadablePlistEngine.converted(text, format: .base64(.binary))
-        case .jsonBase64: return try ReadablePlistEngine.converted(text, format: .base64(.json))
+        case .binaryBase64: return try ReadablePlistEngine.converted(text, format: .base64(.binary), originalBytes: original)
+        case .jsonBase64: return try ReadablePlistEngine.converted(text, format: .base64(.json), originalBytes: original)
         }
     }
 
