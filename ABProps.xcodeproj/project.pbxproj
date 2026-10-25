@@ -20,6 +20,8 @@
 		A1000B /* WebABProps.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1100E /* WebABProps.swift */; };
         A1000C /* UniversalPlistCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1100F /* UniversalPlistCodec.swift */; };
         A1000D /* UniversalPlistEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11010 /* UniversalPlistEditor.swift */; };
+        A1000E /* ReadablePlistEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11011 /* ReadablePlistEngine.swift */; };
+        A1000F /* XMLSourceEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11012 /* XMLSourceEditor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +42,8 @@
 		A1100E /* WebABProps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebABProps.swift; sourceTree = "<group>"; };
         A1100F /* UniversalPlistCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UniversalPlistCodec.swift; sourceTree = "<group>"; };
         A11010 /* UniversalPlistEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UniversalPlistEditor.swift; sourceTree = "<group>"; };
+        A11011 /* ReadablePlistEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadablePlistEngine.swift; sourceTree = "<group>"; };
+        A11012 /* XMLSourceEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XMLSourceEditor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -152,7 +156,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10008 /* Assets.xcassets in Resources */,
-				A1000A /* ios-abprops-names.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
