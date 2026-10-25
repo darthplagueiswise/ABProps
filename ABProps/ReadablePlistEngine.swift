@@ -210,7 +210,20 @@ enum ReadablePlistEngine {
                     var ignored = Statistics()
                     let originalExpanded = expand(decoded.object, depth: depth + 1,
                                                   stats: &ignored)
-                    if same(wrapped, originalExpanded) {
+                    // The on-screen XML may normalize Foundation UID references
+                    // into ordinary plist dictionaries. Compare against exactly
+                    // that same XML roundtrip, not the pre-XML CoreFoundation objects.
+                    let normalizedOriginal: Any
+                    if let xmlData = try? PropertyListSerialization.data(
+                        fromPropertyList: originalExpanded, format: .xml, options: 0
+                    ), let parsed = try? PropertyListSerialization.propertyList(
+                        from: xmlData, options: [], format: nil
+                    ) {
+                        normalizedOriginal = parsed
+                    } else {
+                        normalizedOriginal = originalExpanded
+                    }
+                    if same(wrapped, normalizedOriginal) {
                         // An unchanged encrypted/archived/compressed binary payload
                         // must not be serialized again. Preserve the exact source bytes.
                         return old
