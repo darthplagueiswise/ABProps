@@ -242,8 +242,8 @@ enum SemanticPlistEngine {
 
     private static func equal(_ a: Any, _ b: Any) -> Bool {
         if let d1 = a as? [String: Any], let d2 = b as? [String: Any] {
-            return d1.count == d2.count && d1.allSatisfy {
-                d2[$0.key].map { other in equal($0.value, other) } ?? false
+            return d1.count == d2.count && d1.allSatisfy { key, value in
+                d2[key].map { other in equal(value, other) } ?? false
             }
         }
         if let v1 = a as? [Any], let v2 = b as? [Any] {
