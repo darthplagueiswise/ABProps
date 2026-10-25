@@ -11,7 +11,7 @@ struct ReadablePlistSmoke {
         ]
         let binaryInner = try PropertyListSerialization.data(fromPropertyList: inner, format: .binary, options: 0)
         let xmlInner = try PropertyListSerialization.data(fromPropertyList: inner, format: .xml, options: 0)
-        let jsonInner = Data(#"{"enabled":false,"flags":[1,2,3,4],"message":"hello base64 JSON"}"#.utf8)
+        let jsonInner = Data(#"{"enabled":false,"flags":[1,2,null,4],"message":"hello base64 JSON","empty":null}"#.utf8)
         let archive = try NSKeyedArchiver.archivedData(
             withRootObject: NSDictionary(dictionary: ["account": "sample", "value": 42]),
             requiringSecureCoding: false
@@ -50,6 +50,10 @@ struct ReadablePlistSmoke {
         let decoded = Data(base64Encoded: reBase64)!
         let text = String(decoding: decoded, as: UTF8.self)
         precondition(text.contains("edited Base64 JSON"), "Edited text is reencoded in original Base64 field")
+        let nullJSON = try JSONSerialization.jsonObject(with: decoded, options: []) as! [String: Any]
+        precondition(nullJSON["empty"] is NSNull, "JSON null is not dropped")
+        let flags = nullJSON["flags"] as! [Any]
+        precondition(flags[2] is NSNull, "Nested JSON null preserved")
         let arrays = editedRoot["kCompositeEventsArrayPreferenceKey"] as! [[NSNumber]]
         precondition(arrays.count == 3 && arrays.allSatisfy { $0.count == 4096 })
         precondition((editedRoot["embeddedBinary"] as! Data) == binaryInner)
