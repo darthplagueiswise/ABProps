@@ -11,6 +11,7 @@ struct SemanticPlistSmoke {
             withRootObject: archive, requiringSecureCoding: false
         )
         let json = #"{"accounts":[{"name":"Alice"},{"name":"Bob"}],"active":true,"missing":null}"#
+        let rawKey = Data([0xbc, 0xc4, 0xfe, 0xda, 0xa8, 0xa9, 0x8b, 0xca, 0x72, 0x27, 0x14, 0x71, 0x9b, 0xca, 0x22, 0x54])
         let source: [String: Any] = [
             "AppAEMAnonCredServerConfigs": archived,
             "FXCachingCommon.linkedAccountsData": archived.base64EncodedString(),
@@ -19,13 +20,25 @@ struct SemanticPlistSmoke {
             "json_text": json,
             "json_b64": Data(json.utf8).base64EncodedString(),
             "kCompositeEventsArrayPreferenceKey": [[Int](repeating: 0, count: 150), [Int](repeating: 1, count: 200)],
-            "normal_id": "1603421209951282"
+            "normal_id": "1603421209951282",
+            "publicKey": rawKey,
+            "encoded_key": rawKey.base64EncodedString(),
+            "text_data": Data("false".utf8),
+            "ordinary_plain": "FACEBOOK12345678"
         ]
         let binary = try PropertyListSerialization.data(fromPropertyList: source, format: .binary, options: 0)
         let read = try SemanticPlistEngine.open(binary)
         guard let root = read.semantic as? [String: Any] else { fatalError("root missing") }
-        precondition(root.count == 8)
+        precondition(root.count == 12)
         precondition((root["normal_id"] as? String) == "1603421209951282", "ordinary IDs must stay strings")
+        precondition(root["publicKey"] as? String == "hex:bcc4fedaa8a98bca722714719bca2254",
+                     "Raw key must display all decoded bytes")
+        precondition(root["encoded_key"] as? String == "hex:bcc4fedaa8a98bca722714719bca2254",
+                     "String Base64 must display decoded raw bytes")
+        precondition(root["text_data"] as? String == "utf8:false",
+                     "Raw UTF-8 Data decoded without converting original Data type")
+        precondition(root["ordinary_plain"] as? String == "FACEBOOK12345678",
+                     "Ordinary strings are never guessed as Base64")
         precondition(!read.text.contains("ENVELOPE_"), "No implementation envelopes visible")
         guard let tab = root["FBTabConfiguration"] as? [String: Any],
               let tabs = tab["tabs"] as? [[String:Any]] else { fatalError("tabs not decoded") }
@@ -44,6 +57,30 @@ struct SemanticPlistSmoke {
         let preserved = try PropertyListSerialization.propertyList(from: rebuilt, options: [], format: nil) as! [String:Any]
         precondition(original["AppAEMAnonCredServerConfigs"] as! Data == preserved["AppAEMAnonCredServerConfigs"] as! Data)
         precondition(original["FXCachingCommon.linkedAccountsData"] as! String == preserved["FXCachingCommon.linkedAccountsData"] as! String)
+        precondition(original["publicKey"] as! Data == preserved["publicKey"] as! Data,
+                     "Unedited Data exact")
+        precondition(original["encoded_key"] as! String == preserved["encoded_key"] as! String,
+                     "Unedited Base64 exact")
+        precondition(original["text_data"] as! Data == preserved["text_data"] as! Data,
+                     "Unedited UTF8 Data exact")
+        let changedKeyXML = read.text.replacingOccurrences(
+            of: "hex:bcc4fedaa8a98bca722714719bca2254",
+            with: "hex:bcc4fedaa8a98bca722714719bca2255"
+        )
+        let keyChangedBytes = try SemanticPlistEngine.save(
+            changedKeyXML, original: binary, kind: read.kind
+        )
+        let keyChangedRoot = try PropertyListSerialization.propertyList(
+            from: keyChangedBytes, options: [], format: nil
+        ) as! [String: Any]
+        let expectedKey = Data([0xbc, 0xc4, 0xfe, 0xda, 0xa8, 0xa9, 0x8b, 0xca, 0x72, 0x27, 0x14, 0x71, 0x9b, 0xca, 0x22, 0x55])
+        precondition((keyChangedRoot["publicKey"] as! Data) == expectedKey,
+                     "Edited hex reconstitutes original Data carrier")
+        precondition((keyChangedRoot["encoded_key"] as! String) == expectedKey.base64EncodedString(),
+                     "Edited hex reconstitutes original Base64 string carrier exactly once")
+        precondition(keyChangedRoot["normal_id"] as! String == source["normal_id"] as! String)
+        precondition(keyChangedRoot["ordinary_plain"] as! String == source["ordinary_plain"] as! String)
+        precondition((keyChangedRoot["text_data"] as! Data) == Data("false".utf8))
         // Apply change to an archived scalar using semantically visible XML, then unarchive it.
         let changed = read.text.replacingOccurrences(of: "<string>Example User</string>", with: "<string>Updated User</string>")
         let editedBytes = try SemanticPlistEngine.save(changed, original: binary, kind: read.kind)
