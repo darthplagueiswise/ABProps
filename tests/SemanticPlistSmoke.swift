@@ -33,7 +33,8 @@ struct SemanticPlistSmoke {
         guard let linked = root["FXCachingCommon.linkedAccountsData"] as? [String: Any] else {
             fatalError("semantic keyed archive not flattened, value=" + String(describing: root["FXCachingCommon.linkedAccountsData"]).prefix(1200))
         }
-        guard linked["account"] as? String == "Example User" else { fatalError("Archive unresolved dictionary: " + String(describing: linked).prefix(1300)) }
+        guard linked["account"] as? String == "Example User" else { let graph = try! UniversalPlistCodec.decode(archived.base64EncodedString().data(using: .utf8)!).object as! [String:Any]
+            fatalError("Archive unresolved: \(linked). TOP=\(String(describing: graph["$top"])) OBJECTS=\(String(describing: (graph["$objects"] as? [Any])?.prefix(8)))") }
         let data = root["json_data"] as! [String: Any]
         precondition((data["missing"] as? [String: Bool])?["__json_null__"] == true)
         precondition(root["kCompositeEventsArrayPreferenceKey"] is [[Int]])
