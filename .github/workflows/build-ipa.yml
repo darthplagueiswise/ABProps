@@ -1,8 +1,8 @@
-name: Build IPA (iOS SDK 26)
+name: Build IPA (iOS SDK 27)
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, "feature/universal-plist-liquid-glass-ios27"]
   workflow_dispatch:
 
 permissions:
@@ -10,21 +10,23 @@ permissions:
 
 jobs:
   build:
-    name: SDK 26 unsigned IPA
-    runs-on: macos-26
+    name: iOS 27 unsigned IPA
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode 26
+      - name: Select Xcode 27.1 (iOS 27 SDK)
         run: |
-          if [ -d /Applications/Xcode_26.6.app ]; then sudo xcode-select -s /Applications/Xcode_26.6.app
-          elif [ -d /Applications/Xcode_26.app ]; then sudo xcode-select -s /Applications/Xcode_26.app
-          elif [ -d /Applications/Xcode.app ]; then sudo xcode-select -s /Applications/Xcode.app
-          fi
+          set -euo pipefail
+          if [ -d /Applications/Xcode_27.1.app ]; then sudo xcode-select -s /Applications/Xcode_27.1.app
+          elif [ -d /Applications/Xcode_27.app ]; then sudo xcode-select -s /Applications/Xcode_27.app
+          else echo "Xcode 27 unavailable" >&2; exit 1; fi
           xcodebuild -version
+          SDK_MAJOR=$(xcrun --sdk iphoneos --show-sdk-version | cut -d. -f1)
+          test "$SDK_MAJOR" = "27"
           echo "iphoneos SDK=$(xcrun --sdk iphoneos --show-sdk-version)"
 
-      - name: Build Capstone ARM64 static lib (iphoneos)
+      - name: Build Capstone ARM64 static lib (iphoneos SDK 27)
         run: |
           set -e
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
@@ -32,7 +34,7 @@ jobs:
           cmake -S Vendor/capstone -B Vendor/capstone-build -G Xcode \
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=26.0 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=27.0 \
             -DCMAKE_OSX_SYSROOT=iphoneos \
             -DCAPSTONE_BUILD_SHARED=OFF \
             -DCAPSTONE_BUILD_CSTOOL=OFF \
@@ -66,7 +68,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY= \
             DEVELOPMENT_TEAM= \
-            IPHONEOS_DEPLOYMENT_TARGET=26.0 \
+            IPHONEOS_DEPLOYMENT_TARGET=27.0 \
             build
 
       - name: Pack IPA
@@ -82,6 +84,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ABProps.ipa
+          name: ABProps-iOS27-unsigned.ipa
           path: ABProps.ipa
           if-no-files-found: error
+          retention-days: 14
